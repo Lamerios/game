@@ -33,6 +33,10 @@ export interface SessionTask {
   skill: SkillId;
   level: number;
   isReview: boolean;
+  /** The island's harder "star" task (one level up). */
+  star?: boolean;
+  /** Which kind of task the scene builds, e.g. "debug" for the course, "puzzle" for math. */
+  variant?: string;
 }
 
 export interface SessionState {
@@ -41,10 +45,12 @@ export interface SessionState {
   tasks: SessionTask[];
   /** How many tasks from `tasks` are done. */
   done: number;
+  /** The sea crossing ("Course plotting", algo skill) before the island is done. */
+  crossingDone?: boolean;
 }
 
 export interface Profile {
-  schemaVersion: 1;
+  schemaVersion: 2;
   childName: string;
   avatar: { look: string; sailColor: string };
   skills: Record<SkillId, SkillState>;

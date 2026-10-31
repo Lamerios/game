@@ -1,25 +1,9 @@
 import Phaser from 'phaser';
 import { phrase } from '../../core/phrases';
-import { blocks, COLORS, FONT, W } from '../../scenes/ui';
+import { FONT, H, W } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
 import { MiniGameScene } from '../common/MiniGameScene';
 import { generateNote, type NoteObject, type NoteTask } from './generator';
-
-const COLOR_HEX = { red: 0xd62828, blue: 0x277da1, green: 0x43aa8b } as const;
-
-/** 6×6 block sprites per kind; '#' takes the object's own colour. */
-const SPRITES: Record<string, { rows: string[]; palette: Record<string, number> }> = {
-  palm: { rows: ['GGGGG.', 'GG.GGG', '..B...', '..B...', '..B...', '.BBB..'], palette: { G: 0x2a9d8f, B: 0x8d5524 } },
-  stone: { rows: ['......', '..SS..', '.SSSS.', 'SSSSSS', 'SSSSSS', '.SSSS.'], palette: { S: 0x8d99ae } },
-  chest: { rows: ['......', '.####.', '#YYYY#', '######', '#Y##Y#', '######'], palette: { Y: 0xfcbf49 } },
-  turtle: { rows: ['......', '..GGG.', '.GgGgG', 'HGGGGG', '.L..L.', '......'], palette: { G: 0x2d6a4f, g: 0x52b788, H: 0x95d5b2, L: 0x95d5b2 } },
-  barrel: { rows: ['.####.', '#BBBB#', '######', '######', '#BBBB#', '.####.'], palette: { B: 0x5c3317 } },
-  crab: { rows: ['C....C', 'CC..CC', '.CCCC.', 'CCCCCC', '.C..C.', 'C....C'], palette: { C: 0xe76f51 } },
-  boat: { rows: ['......', '...W..', '...WW.', '...M..', '######', '.####.'], palette: { W: 0xffffff, M: 0x8d5524 } },
-  anchor: { rows: ['..AA..', '..AA..', 'AAAAAA', '..AA..', 'A.AA.A', '.AAAA.'], palette: { A: 0x495057 } },
-  flag: { rows: ['P####.', 'P#####', 'P####.', 'P.....', 'P.....', 'PP....'], palette: { P: 0x5c3317 } },
-  cannon: { rows: ['......', '.KKKKK', 'KKKKKK', '.KKK..', 'WW.WW.', 'WW.WW.'], palette: { K: 0x212529, W: 0x8d5524 } },
-};
 
 const NOTE_X = 450;
 
@@ -51,8 +35,8 @@ export class NoteScene extends MiniGameScene {
     this.nextTarget = 0;
     this.views.clear();
     this.readAloudBtn = undefined;
-    this.cameras.main.setBackgroundColor(COLORS.sand);
-    this.add.rectangle(W / 2, 130, W, 260, COLORS.seaLight);
+    this.add.image(W / 2, H / 2, 'bg-beach').setDisplaySize(W, H);
+    this.add.image(NOTE_X - 290, 130, 'bottle').setDisplaySize(150, 90).setAngle(-15);
 
     // The note itself: paper first, text on top.
     const fontSize = this.note.level <= 2 ? 64 : 48;
@@ -74,12 +58,11 @@ export class NoteScene extends MiniGameScene {
   }
 
   private drawObject(o: NoteObject, [x, y]: [number, number]) {
-    const sprite = SPRITES[o.kind]!;
-    const scale = o.size === 'small' ? 14 : o.size === 'big' ? 26 : 20;
-    const palette = { ...sprite.palette, '#': o.color ? COLOR_HEX[o.color] : 0x9c6644 };
-    const g = blocks(this, (-6 * scale) / 2, (-6 * scale) / 2, sprite.rows, scale, palette);
+    const size = o.size === 'small' ? 110 : o.size === 'big' ? 190 : 160;
+    const g = this.add.image(0, o.size === 'small' ? 30 : 0, o.color ? `obj-${o.kind}-${o.color}` : `obj-${o.kind}`).setDisplaySize(size, size);
+    const shadow = this.add.ellipse(0, size / 2 - 8 + (o.size === 'small' ? 30 : 0), size * 0.8, 18, 0x000000, 0.15);
     const hit = this.add.rectangle(0, 0, 200, 190, 0xffffff, 0.001);
-    const c = this.add.container(x, y, [hit, g]).setSize(200, 190).setInteractive({ useHandCursor: true });
+    const c = this.add.container(x, y, [hit, shadow, g]).setSize(200, 190).setInteractive({ useHandCursor: true });
     c.on('pointerup', () => this.tap(o.id));
     this.views.set(o.id, c);
   }

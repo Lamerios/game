@@ -67,13 +67,23 @@ describe('session lifecycle', () => {
     expect(isTimeUp(s, p, NOON + 15 * 60 * 1000)).toBe(true);
   });
 
-  it('finishSession logs, advances route and ends calibration', () => {
-    const p = createProfile('Тест');
+  it('finishSession logs, advances route and ends calibration after three sessions', () => {
+    let p = createProfile('Тест');
     p.currentSession = startSession(p, NOON);
     const after = finishSession(p, NOON + 10);
     expect(after.currentSession).toBeUndefined();
-    expect(after.calibrating).toBe(false);
+    expect(after.calibrating).toBe(true);
     expect(after.sessionLog).toEqual([NOON + 10]);
     expect(after.route.islandIndex).toBe(1);
+    p = finishSession(finishSession(after, NOON + 20), NOON + 30);
+    expect(p.calibrating).toBe(false);
+  });
+
+  it('adds a star task of the focus skill one level up, before the last task', () => {
+    const p = createProfile('Тест');
+    const tasks = buildIsland(p, NOON, 'reading');
+    expect(tasks).toHaveLength(4);
+    expect(tasks[2]).toEqual({ skill: 'reading', level: p.skills.reading.level + 1, isReview: false, star: true });
+    expect(tasks.filter((t) => t.star)).toHaveLength(1);
   });
 });

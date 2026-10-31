@@ -11,6 +11,8 @@
  * public/audio/<id>.mp3; public/audio/manifest.json keeps a hash of its text and
  * voice settings, so unchanged clips are never re-synthesised (and never re-billed).
  *
+ * Story lines ("rumb.…", "blot.…") use their speaker's voice from content/phrases.json
+ * "speakers"; everything else uses the default below.
  * Voice settings: TTS_VOICE (default alena), TTS_EMOTION (default good, '' for none),
  * TTS_SPEED (default 0.9). The key is read from the environment only and never printed.
  */
@@ -18,7 +20,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { allClips } from '../src/core/phrases';
+import { allClips, SPEAKERS, speakerOf } from '../src/core/phrases';
 import { allNoteTexts } from '../src/games/note/generator';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -101,8 +103,14 @@ async function main() {
     : { voice: settings, clips: {} };
   const next: Record<string, string> = {};
   const todo: [string, string][] = [];
+  const settingsFor = (id: string): VoiceSettings => {
+    const sp = speakerOf(id);
+    if (!sp) return settings;
+    const { voice, emotion, speed } = SPEAKERS[sp]!;
+    return { voice, emotion, speed };
+  };
   for (const [id, text] of clips) {
-    const h = hashOf(text, settings);
+    const h = hashOf(text, settingsFor(id));
     next[id] = h;
     if (old.clips[id] !== h || !existsSync(join(OUT, `${id}.mp3`))) todo.push([id, text]);
   }
@@ -126,7 +134,7 @@ async function main() {
   };
   let n = 0;
   await pool(todo, CONCURRENCY, async ([id, text]) => {
-    writeFileSync(join(OUT, `${id}.mp3`), await synthesize(text, settings, key));
+    writeFileSync(join(OUT, `${id}.mp3`), await synthesize(text, settingsFor(id), key));
     done[id] = next[id]!;
     if (++n % 25 === 0) {
       save();

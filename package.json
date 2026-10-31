@@ -12,6 +12,7 @@
     "tts": "tsx tools/tts.ts"
   },
   "dependencies": {
+    "chess.js": "1.4.0",
     "idb-keyval": "6.2.2",
     "phaser": "3.90.0"
   },
