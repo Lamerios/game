@@ -6,6 +6,8 @@ import { setChildName } from './core/phrases';
 import { EPISODES, ISLAND_FOCUS, islandOf } from './story/script';
 import type { Outcome, Profile, SessionTask, SkillId } from './core/types';
 
+const PARENT_GRANT = 'parentGrant';
+
 /** Thin stateful wrapper the scenes talk to. All rules live in core/. */
 export class GameState {
   private constructor(
@@ -24,12 +26,23 @@ export class GameState {
   }
 
   gate(now = Date.now()): Gate {
+    if (this.seen(PARENT_GRANT)) return { allowed: true };
     return canStartSession(this.profile, now);
+  }
+
+  /** A parent let the child play one more session despite the daily limit or the break. */
+  async grantSession() {
+    await this.markSeen(PARENT_GRANT);
   }
 
   async beginOrResume(now = Date.now()) {
     if (!this.profile.currentSession) {
-      this.profile = { ...this.profile, currentSession: startSession(this.profile, now, ISLAND_FOCUS[islandOf(this.profile.route.islandIndex)]) };
+      const inventory = { ...this.profile.inventory, [PARENT_GRANT]: 0 };
+      this.profile = {
+        ...this.profile,
+        inventory,
+        currentSession: startSession(this.profile, now, ISLAND_FOCUS[islandOf(this.profile.route.islandIndex)]),
+      };
       await this.save();
     }
     return this.profile.currentSession!;
