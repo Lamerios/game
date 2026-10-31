@@ -70,11 +70,11 @@ export function generateMathPuzzle(level: number, rng: Rng): Puzzle {
       const o = numberOptions(rng, x, [total, known]);
       return {
         skill: 'math', kind, level, ...o,
-        text: `Весы Моржа уравновешены. Слева мешок на ${known} и ящик, справа гиря на ${total}. Сколько весит ящик?`,
+        text: `Весы Моржа уравновешены. Слева ящик на ${known} и ящик-загадка, справа гиря на ${total}. Сколько весит ящик-загадка?`,
         visual: { type: 'scales', known, total },
         hints: [
           'Весы ровные: слева столько же, сколько справа.',
-          `Ящик и ${known} вместе дают ${total}.`,
+          `Загадка и ${known} вместе дают ${total}.`,
           `Посчитай от ${known} до ${total}. Сколько шагов?`,
         ],
         itemId: `scales-${known}-${total}`,

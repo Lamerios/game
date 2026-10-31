@@ -72,12 +72,12 @@ export class PuzzleScene extends MiniGameScene {
           g.fillStyle(0xced4da).fillEllipse(x, cy + 56, 220, 30);
           g.lineStyle(5, 0x2b2d42).strokeEllipse(x, cy + 56, 220, 30);
         }
-        this.labelled(390, cy + 6, 'crate', 80, String(v.known));
-        this.labelled(490, cy + 6, 'crate', 80, '?', '#e63946');
+        this.labelled(385, cy - 10, 'crate', 110, String(v.known));
+        this.labelled(500, cy - 10, 'crate', 110, '?', '#e63946');
         const wgt = this.add.graphics();
-        wgt.fillStyle(0x4a4e69).fillRoundedRect(790, cy - 34, 100, 80, 14);
-        wgt.lineStyle(5, 0x2b2d42).strokeRoundedRect(790, cy - 34, 100, 80, 14);
-        this.add.text(840, cy + 6, String(v.total), { fontFamily: FONT, fontSize: '44px', color: '#ffffff' }).setOrigin(0.5);
+        wgt.fillStyle(0x4a4e69).fillRoundedRect(775, cy - 60, 130, 110, 16);
+        wgt.lineStyle(5, 0x2b2d42).strokeRoundedRect(775, cy - 60, 130, 110, 16);
+        this.add.text(840, cy - 5, String(v.total), { fontFamily: FONT, fontSize: '56px', color: '#ffffff' }).setOrigin(0.5);
         return;
       }
       case 'trade': {
