@@ -12,8 +12,8 @@ const SKILL_NAME: Record<SkillId, string> = {
 };
 
 /**
- * Runs the island's tasks one by one. Mini-games arrive in stages 2–4; for now
- * each task is a stub with "solved / with hint / shown" buttons so the session
+ * Runs the island's tasks one by one. Reading and math open their mini-games;
+ * chess (stage 3) is still a stub with "solved / with hint / shown" buttons so the session
  * loop, adaptivity and saving can be exercised end to end.
  */
 export class IslandScene extends Phaser.Scene {
@@ -41,6 +41,13 @@ export class IslandScene extends Phaser.Scene {
     this.add
       .text(W / 2, 290, 'Заглушка: мини-игра появится на следующих этапах', { fontFamily: FONT, fontSize: '28px', color: '#5c3317' })
       .setOrigin(0.5);
+
+    const real: Partial<Record<SkillId, string>> = { reading: 'Note', math: 'Hold' };
+    const sceneKey = real[task.skill];
+    if (sceneKey) {
+      this.scene.start(sceneKey, { task });
+      return;
+    }
 
     const started = Date.now();
     const done = async (outcome: 'first_try' | 'with_hint' | 'shown', hints: number) => {
