@@ -5,31 +5,64 @@ import { button, FONT, H, W } from './ui';
 
 /**
  * Parent check (SDD: grown-up gate): a multiplication a 6-year-old can't do yet.
- * Passing it allows one extra session today.
+ * Passing it opens the parent menu: one extra session today, or a fresh start.
  */
 export class HarborScene extends Phaser.Scene {
+  private overlay(title: string) {
+    const items: Phaser.GameObjects.GameObject[] = [
+      this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive(),
+      this.add.rectangle(W / 2, H / 2, 760, 420, 0xfff1d0).setStrokeStyle(6, 0x8d5524),
+      this.add.text(W / 2, H / 2 - 130, title, { fontFamily: FONT, fontSize: '32px', color: '#3d2b1f', align: 'center' }).setOrigin(0.5),
+    ];
+    const close = () => items.forEach((o) => o.destroy());
+    return { items, close };
+  }
+
   private parentGate(state: GameState) {
     const a = Phaser.Math.Between(6, 9);
     const b = Phaser.Math.Between(6, 9);
     const answer = a * b;
     const options = Phaser.Utils.Array.Shuffle([answer, answer + a, answer - b, answer + 1]);
-    const items: Phaser.GameObjects.GameObject[] = [
-      this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6).setInteractive(),
-      this.add.rectangle(W / 2, H / 2, 760, 420, 0xfff1d0).setStrokeStyle(6, 0x8d5524),
-      this.add
-        .text(W / 2, H / 2 - 130, `Для родителей: ещё одно плавание сегодня.\nСколько будет ${a} × ${b}?`, { fontFamily: FONT, fontSize: '32px', color: '#3d2b1f', align: 'center' })
-        .setOrigin(0.5),
-    ];
-    const close = () => items.forEach((o) => o.destroy());
+    const { items, close } = this.overlay(`Для родителей.\nСколько будет ${a} × ${b}?`);
     options.forEach((v, i) => {
       items.push(
         button(this, W / 2 - 255 + i * 170, H / 2 + 20, String(v), () => {
           close();
-          if (v === answer) void state.grantSession().then(() => this.scene.restart());
+          if (v === answer) this.parentMenu(state);
         }, { w: 150, h: 96 }),
       );
     });
     items.push(button(this, W / 2, H / 2 + 150, 'Отмена', close, { w: 240, h: 72, color: 0x6c757d }));
+  }
+
+  private parentMenu(state: GameState) {
+    const { items, close } = this.overlay('Для родителей');
+    if (!state.gate().allowed) {
+      items.push(
+        button(this, W / 2, H / 2 - 40, 'Ещё одно плавание', () => {
+          close();
+          void state.grantSession().then(() => this.scene.restart());
+        }, { w: 520, h: 80 }),
+      );
+    }
+    items.push(
+      button(this, W / 2, H / 2 + 60, 'Начать заново', () => {
+        close();
+        this.confirmReset(state);
+      }, { w: 520, h: 80, color: 0xc1121f }),
+    );
+    items.push(button(this, W / 2, H / 2 + 155, 'Закрыть', close, { w: 240, h: 64, color: 0x6c757d }));
+  }
+
+  private confirmReset(state: GameState) {
+    const { items, close } = this.overlay('Стереть весь прогресс?\nИгра начнётся с самого начала.');
+    items.push(
+      button(this, W / 2 - 150, H / 2 + 60, 'Да, стереть', () => {
+        close();
+        void state.reset().then(() => this.scene.restart());
+      }, { w: 260, h: 80, color: 0xc1121f }),
+    );
+    items.push(button(this, W / 2 + 150, H / 2 + 60, 'Нет', close, { w: 200, h: 80, color: 0x6c757d }));
   }
 
   constructor() {
@@ -67,11 +100,11 @@ export class HarborScene extends Phaser.Scene {
       this.add
         .text(980, 330, msg, { fontFamily: FONT, fontSize: '40px', color: '#ffffff', backgroundColor: '#1b4965', padding: { x: 16, y: 10 } })
         .setOrigin(0.5);
-      this.add
-        .text(W - 20, H - 20, 'Для родителей', { fontFamily: FONT, fontSize: '24px', color: '#ffffff', backgroundColor: '#0b2233', padding: { x: 12, y: 8 } })
-        .setOrigin(1)
-        .setInteractive({ useHandCursor: true })
-        .on('pointerup', () => this.parentGate(state));
     }
+    this.add
+      .text(W - 20, H - 20, 'Для родителей', { fontFamily: FONT, fontSize: '24px', color: '#ffffff', backgroundColor: '#0b2233', padding: { x: 12, y: 8 } })
+      .setOrigin(1)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => this.parentGate(state));
   }
 }

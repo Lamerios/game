@@ -35,6 +35,13 @@ export class GameState {
     await this.markSeen(PARENT_GRANT);
   }
 
+  /** Wipes all progress (parent menu): the season starts again from the prologue. */
+  async reset() {
+    await this.storage.resetProfile();
+    this.profile = createProfile(this.profile.childName);
+    await this.save();
+  }
+
   async beginOrResume(now = Date.now()) {
     if (!this.profile.currentSession) {
       const inventory = { ...this.profile.inventory, [PARENT_GRANT]: 0 };
