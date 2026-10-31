@@ -8,8 +8,6 @@ import { generateChess, type ChessTask } from './generator';
 const CELL = 80;
 const BX = 60;
 const BY = (H - 8 * CELL) / 2;
-/** Standard silhouettes (Unicode), so the skill carries over to a real board (SDD 6). */
-const GLYPH: Record<string, string> = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 const FILES = 'abcdefgh';
 
 export class ChessScene extends MiniGameScene {
@@ -35,7 +33,11 @@ export class ChessScene extends MiniGameScene {
     this.board = new Chess(this.puzzle.fen);
     this.selected = undefined;
     this.cameras.main.setBackgroundColor(0x264653);
-    this.add.text(BX + 8 * CELL + 50, 80, 'Шахматный форт', { fontFamily: FONT, fontSize: '44px', color: '#ffffff' });
+    this.add.image(W / 2, H / 2, 'bg-beach').setDisplaySize(W, H);
+    this.add.rectangle(BX - 14, BY - 14, 8 * CELL + 28, 8 * CELL + 28, 0x7a4a24).setOrigin(0).setStrokeStyle(6, 0x2b2d42);
+    this.add.rectangle(BX + 8 * CELL + 30, 40, W - (BX + 8 * CELL + 50), H - 80, 0x264653, 0.85).setOrigin(0).setStrokeStyle(4, 0xffd166);
+    this.add.image(BX + 8 * CELL + 120, 200, 'char-general').setDisplaySize(150, 150);
+    this.add.text(BX + 8 * CELL + 50, 80, 'Форт Ладья', { fontFamily: FONT, fontSize: '44px', color: '#ffffff' });
     this.add.text(BX + 8 * CELL + 50, 330, this.puzzle.goal, { fontFamily: FONT, fontSize: '32px', color: '#e9c46a', wordWrap: { width: W - (BX + 8 * CELL + 90) } });
     this.add.text(BX + 8 * CELL + 50, H - 120, 'Ты играешь белыми', { fontFamily: FONT, fontSize: '26px', color: '#ffffff' });
     this.layer = this.add.container(0, 0);
@@ -66,17 +68,7 @@ export class ChessScene extends MiniGameScene {
         if (marks.includes(s)) this.layer.add(this.add.circle(x + CELL / 2, y + CELL / 2, 12, 0x2a9d8f, 0.8));
         const p = this.board.get(s);
         if (p) {
-          this.layer.add(
-            this.add
-              .text(x + CELL / 2, y + CELL / 2 + 2, GLYPH[p.type]!, {
-                fontFamily: '"DejaVu Sans", "Segoe UI Symbol", "Apple Symbols", serif',
-                fontSize: '64px',
-                color: p.color === 'w' ? '#ffffff' : '#1b1b1b',
-                stroke: p.color === 'w' ? '#1b1b1b' : '#ffffff',
-                strokeThickness: 3,
-              })
-              .setOrigin(0.5),
-          );
+          this.layer.add(this.add.image(x + CELL / 2, y + CELL / 2, `piece-${p.color}${p.type}`).setDisplaySize(CELL - 6, CELL - 6));
         }
       }
     }

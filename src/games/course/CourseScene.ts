@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { blocks, button, COLORS, FONT, H, YACHT, YACHT_PALETTE } from '../../scenes/ui';
+import { button, COLORS, FONT, H } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
 import { MiniGameScene } from '../common/MiniGameScene';
 import { run, type Cmd, type CourseMap, type Program } from './engine';
-import { generateCourse } from './generator';
+import { breakProgram, generateCourse } from './generator';
 
 const CELL = 60;
 const GX = 40;
@@ -22,7 +22,9 @@ export class CourseScene extends MiniGameScene {
   private yacht!: Phaser.GameObjects.Container;
   private strip!: Phaser.GameObjects.Container;
   private running = false;
-  private coinViews = new Map<string, Phaser.GameObjects.Rectangle>();
+  private coinViews = new Map<string, Phaser.GameObjects.Image>();
+  /** "Fix Klyaksa's route": the program is given with one wrong arrow; taps change arrows. */
+  private debug = false;
 
   constructor() {
     super('Course');
@@ -35,46 +37,56 @@ export class CourseScene extends MiniGameScene {
   }
 
   protected instruction() {
+    if (this.debug) return 'Клякса испортил маршрут: одна стрелка неверная. Нажми на неё, чтобы поменять, и жми «В путь!».';
     const extra = this.map.coins.length ? ' Собери все монеты по пути.' : '';
     const limit = this.map.maxBlocks ? ` Можно не больше ${this.map.maxBlocks} стрелок — используй повтор.` : '';
-    return `Проложи курс до флага. Собери стрелки и нажми «В путь!».${extra}${limit}`;
+    return `Проложи курс до буя. Собери стрелки и нажми «В путь!».${extra}${limit}`;
   }
 
   create() {
     this.map = generateCourse(this.task.level, this.rng);
-    this.program = [];
+    this.debug = this.task.variant === 'debug';
+    this.program = this.debug ? breakProgram(this.map, this.rng) : [];
     this.running = false;
     this.coinViews.clear();
-    this.cameras.main.setBackgroundColor(COLORS.night);
-    this.add.text(GX, 60, 'Прокладка курса', { fontFamily: FONT, fontSize: '44px', color: '#ffffff' }).setOrigin(0, 0.5);
+    this.add.image(640, 360, 'bg-sea').setDisplaySize(1280, 720);
+    this.add
+      .text(GX, 60, this.debug ? 'Почини маршрут' : 'Прокладка курса', { fontFamily: FONT, fontSize: '44px', color: '#ffffff', stroke: '#0b2233', strokeThickness: 6 })
+      .setOrigin(0, 0.5);
 
     const m = this.map;
+    this.add.rectangle(GX - 6, GY - 6, m.w * CELL + 10, m.h * CELL + 10, 0x0b2233, 0.6).setOrigin(0).setStrokeStyle(4, 0xffd166);
     for (let y = 0; y < m.h; y++)
       for (let x = 0; x < m.w; x++)
-        this.add.rectangle(GX + x * CELL, GY + y * CELL, CELL - 2, CELL - 2, COLORS.sea).setOrigin(0);
-    for (const r of m.reefs) this.add.rectangle(GX + r.x * CELL + 6, GY + r.y * CELL + 6, CELL - 14, CELL - 14, 0x6c757d).setOrigin(0);
+        this.add.rectangle(GX + x * CELL, GY + y * CELL, CELL - 2, CELL - 2, (x + y) % 2 ? 0x2f6fa3 : 0x3a7fb5).setOrigin(0);
+    for (const r of m.reefs) this.add.image(GX + r.x * CELL + CELL / 2, GY + r.y * CELL + CELL / 2, 'reef').setDisplaySize(CELL - 4, CELL - 4);
     for (const c of m.coins) {
-      this.coinViews.set(`${c.x},${c.y}`, this.add.rectangle(GX + c.x * CELL + CELL / 2, GY + c.y * CELL + CELL / 2, 22, 22, 0xfcbf49));
+      this.coinViews.set(`${c.x},${c.y}`, this.add.image(GX + c.x * CELL + CELL / 2, GY + c.y * CELL + CELL / 2, 'coin').setDisplaySize(34, 34));
     }
-    // Goal flag.
-    blocks(this, GX + m.goal.x * CELL + 14, GY + m.goal.y * CELL + 8, ['RRR.', 'RRRR', 'RRR.', 'P...', 'P...', 'P...'], 8, { R: 0xd62828, P: 0xffffff });
-    // Bow marker so the child always sees which way "forward" is.
-    const bow = this.add.triangle(0, -28, 0, 10, 8, -4, 16, 10, 0xfcbf49).setOrigin(0.5);
-    this.yacht = this.add.container(0, 0, [blocks(this, -27, -18, YACHT, 6, YACHT_PALETTE), bow]);
+    this.add.image(GX + m.goal.x * CELL + CELL / 2, GY + m.goal.y * CELL + CELL / 2, 'goal').setDisplaySize(CELL, CELL);
+    // The top-view yacht art points east; turn it so angle 0 means "up" like the engine.
+    const hull = this.add.image(0, 0, 'yacht-top').setDisplaySize(CELL + 8, CELL + 8).setAngle(-90);
+    this.yacht = this.add.container(0, 0, [hull]);
     this.placeYacht(m.start.x, m.start.y, m.start.dir);
 
     // Palette.
     const px = GX + m.w * CELL + 50;
-    (['F', 'L', 'R'] as Cmd[]).forEach((c, i) =>
-      button(this, px + 50 + i * 112, GY + 40, ARROW[c], () => this.add_(c), { w: 100, h: 96 }),
-    );
-    if (m.allowRepeat) {
+    if (!this.debug) {
+      (['F', 'L', 'R'] as Cmd[]).forEach((c, i) =>
+        button(this, px + 50 + i * 112, GY + 40, ARROW[c], () => this.add_(c), { w: 100, h: 96 }),
+      );
+    }
+    if (this.debug) {
+      this.add
+        .text(px, GY + 40, 'Нажми на стрелку, чтобы поменять её: ↑ → ↶ → ↷', { fontFamily: FONT, fontSize: '26px', color: '#ffd166', wordWrap: { width: 360 } })
+        .setOrigin(0, 0);
+    } else if (m.allowRepeat) {
       this.add
         .text(px, GY + 110, 'Нажми на стрелку в курсе, чтобы повторить её ×2, ×3…', { fontFamily: FONT, fontSize: '22px', color: '#e9c46a', wordWrap: { width: 330 } })
         .setOrigin(0, 0);
     }
     this.strip = this.add.container(px, GY + 230);
-    button(this, px + 110, H - 70, 'Стереть', () => this.clearProgram(), { w: 220, h: 80, color: 0x6c757d });
+    if (!this.debug) button(this, px + 110, H - 70, 'Стереть', () => this.clearProgram(), { w: 220, h: 80, color: 0x6c757d });
     button(this, px + 350, H - 70, 'В путь!', () => void this.go(), { w: 260, h: 80, color: COLORS.leaf });
     this.renderStrip();
     this.addParrot();
@@ -112,7 +124,9 @@ export class CourseScene extends MiniGameScene {
       if (b.times > 1) items.push(this.add.text(x + 80, y + 4, `×${b.times}`, { fontFamily: FONT, fontSize: '26px', color: '#fcbf49' }).setOrigin(1, 0));
       tile.setInteractive({ useHandCursor: true }).on('pointerup', () => {
         if (this.locked || this.running) return;
-        if (this.map.allowRepeat) {
+        if (this.debug) {
+          b.cmd = b.cmd === 'F' ? 'L' : b.cmd === 'L' ? 'R' : 'F';
+        } else if (this.map.allowRepeat) {
           b.times = b.times >= 6 ? 1 : b.times + 1;
         } else {
           this.program.splice(i, 1);
@@ -149,7 +163,7 @@ export class CourseScene extends MiniGameScene {
     } else if (res.reason === 'coins_left') {
       this.say('Не все монеты собраны.');
     } else {
-      this.say('Яхта не дошла до флага. Что добавить?');
+      this.say(this.debug ? 'Яхта не дошла до буя. Какая стрелка ведёт не туда?' : 'Яхта не дошла до буя. Что добавить?');
     }
     this.renderStrip(-1, res.ok ? -1 : res.block);
     this.time.delayedCall(1200, () => {
@@ -183,7 +197,11 @@ export class CourseScene extends MiniGameScene {
       this.say(this.instruction());
     } else if (step === 2) {
       const dirName = ['вверх', 'вправо', 'вниз', 'влево'][this.map.start.dir];
-      this.say(`Яхта смотрит ${dirName}. Повернись к флагу и плыви вперёд.`);
+      this.say(`Яхта смотрит ${dirName}. Повернись к бую и плыви вперёд.`);
+    } else if (step === 3 && this.debug) {
+      const bad = this.program.findIndex((b, i) => b.cmd !== sol[i]?.cmd);
+      this.say('Посмотри на мигающую стрелку.');
+      this.renderStrip(-1, bad);
     } else if (step === 3) {
       const b = sol[0]!;
       this.say(`Первая стрелка: ${SAY[b.cmd]}${b.times > 1 ? `, повторить ${b.times} раза` : ''}.`);
@@ -191,7 +209,7 @@ export class CourseScene extends MiniGameScene {
       this.renderStrip();
     } else {
       this.locked = true;
-      this.say('Смотри, вот курс до флага.');
+      this.say('Смотри, вот курс до буя.');
       this.program = sol.map((b) => ({ ...b }));
       this.renderStrip();
       const res = run(this.map, this.program);

@@ -91,3 +91,18 @@ export function generateCourse(level: number, rng: Rng): CourseMap {
   }
   throw new Error(`could not generate course level ${lvl}`);
 }
+
+/**
+ * "Fix Klyaksa's route": the solution with one arrow changed so that it fails.
+ * The child finds that arrow and taps it until it is right.
+ */
+export function breakProgram(map: CourseMap, rng: Rng): Program {
+  for (let tries = 0; tries < 50; tries++) {
+    const prog = map.solution.map((b) => ({ ...b }));
+    const i = int(rng, 0, prog.length - 1);
+    const b = prog[i]!;
+    b.cmd = pick(rng, (['F', 'L', 'R'] as const).filter((c) => c !== b.cmd));
+    if (!run(map, prog).ok) return prog;
+  }
+  return map.solution.map((b, i) => (i === 0 ? { ...b, cmd: b.cmd === 'F' ? 'L' : 'F' } : { ...b }));
+}

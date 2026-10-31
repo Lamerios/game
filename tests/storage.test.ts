@@ -33,3 +33,24 @@ describe('Storage', () => {
     expect(() => migrate({ schemaVersion: 99 })).toThrow();
   });
 });
+
+describe('migration v1 → v2', () => {
+  it('names the child, raises start levels and restarts the season', async () => {
+    const { migrate } = await import('../src/core/storage');
+    const { createProfile, START_LEVELS } = await import('../src/core/profile');
+    const v2 = createProfile('x');
+    const v1 = {
+      ...v2,
+      schemaVersion: 1,
+      childName: 'Юнга',
+      skills: Object.fromEntries(Object.entries(v2.skills).map(([k, v]) => [k, { ...v, level: 1, maxLevel: 5, window: ['first_try'] }])),
+      route: { ...v2.route, islandIndex: 3 },
+    };
+    const p = migrate(v1);
+    expect(p.schemaVersion).toBe(2);
+    expect(p.childName).toBe('Артемий');
+    expect(p.skills.reading.level).toBe(START_LEVELS.reading);
+    expect(p.skills.reading.maxLevel).toBe(7);
+    expect(p.route.islandIndex).toBe(0);
+  });
+});

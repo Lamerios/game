@@ -1,4 +1,4 @@
-import { free, phrase, PRAISE_COUNT, webText, type PhraseId, type Seg, type Utterance } from './phrases';
+import { free, phrase, PRAISE_COUNT, SPEAKERS, webText, type PhraseId, type Seg, type Utterance } from './phrases';
 
 /** Pause between clips of one utterance, seconds. */
 const GAP = 0.06;
@@ -124,6 +124,9 @@ export class Voice {
     const msg = new SpeechSynthesisUtterance(webText(u));
     msg.lang = 'ru-RU';
     msg.rate = 0.9;
+    // Without generated clips, characters still sound different.
+    const sp = u.speaker ? SPEAKERS[u.speaker] : undefined;
+    if (sp) msg.pitch = sp.pitch;
     const ru = speechSynthesis.getVoices().find((v) => v.lang.startsWith('ru'));
     if (ru) msg.voice = ru;
     speechSynthesis.speak(msg);
