@@ -1,0 +1,77 @@
+import { describe, expect, it } from 'vitest';
+import content from '../content/phrases.json';
+import { allClips, free, numberSeg, phrase, stressText, textId, webText, type PhraseId } from '../src/core/phrases';
+import { allNoteTexts, generateNote, NOTE_MAX_LEVEL } from '../src/games/note/generator';
+import { generateHold, HOLD_MAX_LEVEL } from '../src/games/hold/generator';
+import { mulberry32 } from '../src/games/common/rng';
+
+describe('phrases', () => {
+  it('cuts a phrase at its slots and hides stress marks on screen', () => {
+    const u = phrase('hold.load', { n: 7 });
+    expect(u.show).toBe('Загрузи в трюм ровно 7. Нажимай на грузы на причале.');
+    expect(u.segs.map((s) => s.id)).toEqual(['hold.load.0', 'num.nom.7', 'hold.load.1']);
+    expect(u.segs[0]!.say).toBe('Загруз+и в трюм р+овно');
+  });
+
+  it('uses genitive where the phrase asks for it', () => {
+    const u = phrase('hold.hint.count', { a: 5, b: 8 });
+    expect(u.show).toBe('Начни с 5 и досчитай до 8. Сколько шагов?');
+    expect(webText(u)).toBe('Начни с пяти и досчитай до восьми. Сколько шагов?');
+  });
+
+  it('leaves punctuation-only pieces silent', () => {
+    const u = phrase('hold.hint.now', { a: 3, b: 10 });
+    expect(u.segs.at(-1)).toMatchObject({ show: '.', say: '' });
+  });
+
+  it('falls back to the browser voice for numbers it has no clip for', () => {
+    expect(numberSeg(55).voiced).toBe(false);
+    expect(numberSeg(25, 'gen').voiced).toBe(false);
+  });
+
+  it('stresses free text from the dictionary', () => {
+    expect(stressText('Иди к пушке.')).toBe('ид+и к п+ушке.');
+    expect(free('ИДИ К КРАБУ').segs[0]!.id).toBe(textId('ИДИ К КРАБУ'));
+  });
+
+  it('every template piece is a clip, and clip ids are unique', () => {
+    const clips = allClips([]);
+    for (const id of Object.keys(content.phrases)) {
+      const sample = phrase(id as PhraseId, { n: 1, a: 1, b: 2, c: 1, t: 'x' });
+      for (const s of sample.segs) if (s.say && !s.id.startsWith('t.')) expect(clips.has(s.id), s.id).toBe(true);
+    }
+    const all = allClips(allNoteTexts());
+    expect(all.size).toBe(new Set(all.keys()).size);
+  });
+
+  it('every number the hold game can say has a clip', () => {
+    const clips = allClips([]);
+    const rng = mulberry32(42);
+    for (let i = 0; i < 2000; i++) {
+      const t = generateHold(1 + (i % HOLD_MAX_LEVEL), rng);
+      const nums = t.kind === 'load' ? [t.target] : t.kind === 'unload' ? [t.leave] : [t.was, t.became, t.answer];
+      for (const n of nums) {
+        expect(clips.has(`num.nom.${n}`)).toBe(true);
+        expect(clips.has(`num.gen.${n}`)).toBe(true);
+      }
+    }
+  });
+
+  it('allNoteTexts covers every note the generator writes', () => {
+    const texts = new Set(allNoteTexts());
+    const rng = mulberry32(7);
+    for (let i = 0; i < 3000; i++) {
+      const n = generateNote(1 + (i % NOTE_MAX_LEVEL), rng);
+      expect(texts.has(n.text), n.text).toBe(true);
+    }
+  });
+
+  it('every word of every note has a stress (or a single vowel)', () => {
+    for (const t of allNoteTexts()) {
+      for (const w of stressText(t).match(/[а-яё+]+/g) ?? []) {
+        const vowels = (w.match(/[аеёиоуыэюя]/g) ?? []).length;
+        expect(vowels <= 1 || w.includes('+') || w.includes('ё'), `${w} in "${t}"`).toBe(true);
+      }
+    }
+  });
+});

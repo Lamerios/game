@@ -93,3 +93,19 @@ export function generateNote(level: number, rng: Rng): NoteTask {
     }
   }
 }
+
+/** Every text generateNote can produce — tools/tts.ts voices each one for the "read it to me" hint. */
+export function allNoteTexts(): string[] {
+  const out = new Set<string>();
+  const attrs = (k: Kind): (Size | Color)[] => (k.attr === 'size' ? ['big', 'small'] : ['red', 'blue', 'green']);
+  for (const k of KINDS) {
+    if (k.nom.length <= 5) out.add(upper(k.nom));
+    out.add(upper(`иди к ${k.dat}`));
+    for (const a of attrs(k)) {
+      out.add(cap(`иди к ${adjDat(a, k.gender)} ${k.dat}.`));
+      out.add(cap(`иди к ${k.dat}, но не к ${adjDat(a, k.gender)}.`));
+    }
+    for (const k2 of KINDS) if (k2 !== k) out.add(cap(`сначала иди к ${k.dat}, потом к ${k2.dat}.`));
+  }
+  return [...out];
+}

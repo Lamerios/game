@@ -12,9 +12,9 @@ const SKILL_NAME: Record<SkillId, string> = {
 };
 
 /**
- * Runs the island's tasks one by one. Reading and math open their mini-games;
- * chess (stage 3) is still a stub with "solved / with hint / shown" buttons so the session
- * loop, adaptivity and saving can be exercised end to end.
+ * Runs the island: first the sea crossing (Course), then the island's tasks,
+ * each in its own mini-game scene. The stub buttons below remain only as a
+ * fallback for a skill without a scene.
  */
 export class IslandScene extends Phaser.Scene {
   constructor() {
@@ -30,6 +30,11 @@ export class IslandScene extends Phaser.Scene {
       return;
     }
     const session = state.profile.currentSession!;
+    if (!session.crossingDone) {
+      const algo = state.profile.skills.algo;
+      this.scene.start('Course', { task: { skill: 'algo', level: algo.level, isReview: false } });
+      return;
+    }
     title(this, `Остров ${session.islandIndex + 1}: задание ${session.done + 1} из ${session.tasks.length}`);
     this.add
       .text(W / 2, 220, `${SKILL_NAME[task.skill]} · уровень ${task.level}${task.isReview ? ' · повтор' : ''}`, {
@@ -42,7 +47,7 @@ export class IslandScene extends Phaser.Scene {
       .text(W / 2, 290, 'Заглушка: мини-игра появится на следующих этапах', { fontFamily: FONT, fontSize: '28px', color: '#5c3317' })
       .setOrigin(0.5);
 
-    const real: Partial<Record<SkillId, string>> = { reading: 'Note', math: 'Hold' };
+    const real: Partial<Record<SkillId, string>> = { reading: 'Note', math: 'Hold', chess: 'Chess' };
     const sceneKey = real[task.skill];
     if (sceneKey) {
       this.scene.start(sceneKey, { task });
