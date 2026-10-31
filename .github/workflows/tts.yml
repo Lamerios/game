@@ -10,6 +10,7 @@ on:
       - src/games/note/vocab.ts
       - src/games/note/generator.ts
       - tools/tts.ts
+      - .github/workflows/tts.yml
   workflow_dispatch:
     inputs:
       voice:
