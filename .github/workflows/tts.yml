@@ -1,8 +1,15 @@
 name: Voice-over (SpeechKit)
-# Manual run: Actions → "Voice-over (SpeechKit)" → Run workflow, pick the branch.
+# Runs on push when phrases change (any branch), or by hand: Actions → "Voice-over (SpeechKit)" → Run workflow.
 # Needs the repository secret YANDEX_SPEECHKIT_API_KEY (Settings → Secrets and variables → Actions).
 # Synthesises only new or changed clips, then commits public/audio to the same branch.
 on:
+  push:
+    paths:
+      - content/phrases.json
+      - src/core/phrases.ts
+      - src/games/note/vocab.ts
+      - src/games/note/generator.ts
+      - tools/tts.ts
   workflow_dispatch:
     inputs:
       voice:
@@ -26,16 +33,24 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      - name: Check key
+        id: key
+        run: |
+          if [ -n "$KEY" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::warning::Secret YANDEX_SPEECHKIT_API_KEY is not set, skipping voice-over."; fi
+        env:
+          KEY: ${{ secrets.YANDEX_SPEECHKIT_API_KEY }}
       - run: npm run tts
+        if: steps.key.outputs.ok == 'true'
         env:
           YANDEX_SPEECHKIT_API_KEY: ${{ secrets.YANDEX_SPEECHKIT_API_KEY }}
-          TTS_VOICE: ${{ inputs.voice }}
-          TTS_EMOTION: ${{ inputs.emotion }}
-          TTS_SPEED: ${{ inputs.speed }}
+          TTS_VOICE: ${{ inputs.voice || 'alena' }}
+          TTS_EMOTION: ${{ github.event_name == 'workflow_dispatch' && inputs.emotion || 'good' }}
+          TTS_SPEED: ${{ inputs.speed || '0.9' }}
       - name: Commit audio
+        if: steps.key.outputs.ok == 'true'
         run: |
           git add public/audio
           if git diff --cached --quiet; then echo "No changes."; exit 0; fi
           git -c user.name='github-actions[bot]' -c user.email='41898333+github-actions[bot]@users.noreply.github.com' \
-            commit -m "Voice-over: regenerate SpeechKit clips (${{ inputs.voice }})"
+            commit -m "Voice-over: regenerate SpeechKit clips"
           git push

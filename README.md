@@ -32,7 +32,7 @@ YANDEX_SPEECHKIT_API_KEY=… npm run tts         # сгенерировать
 YANDEX_SPEECHKIT_API_KEY=… npm run tts -- --samples alena,filipp,ermil,jane   # послушать голоса → audio-samples/
 ```
 
-Без ключа на компьютере: добавьте секрет `YANDEX_SPEECHKIT_API_KEY` в Settings → Secrets and variables → Actions и запустите Actions → «Voice-over (SpeechKit)» на нужной ветке — mp3 закоммитятся сами. Если какого-то клипа нет, игра произносит фразу голосом браузера.
+Без ключа на компьютере: добавьте секрет `YANDEX_SPEECHKIT_API_KEY` в Settings → Secrets and variables → Actions — при каждом изменении фраз (или вручную: Actions → «Voice-over (SpeechKit)») mp3 сгенерируются и закоммитятся в ту же ветку. Если какого-то клипа нет, игра произносит фразу голосом браузера.
 
 ## Статус
 
