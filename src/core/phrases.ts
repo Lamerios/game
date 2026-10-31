@@ -21,6 +21,8 @@ export interface Utterance {
   /** Text for the speech bubble. */
   show: string;
   segs: Seg[];
+  /** Who speaks (first part of the phrase id, e.g. "rumb"), for the bubble and the browser voice. */
+  speaker?: string;
 }
 
 export type PhraseId = keyof typeof content.phrases;
@@ -29,6 +31,25 @@ export type Params = Record<string, number | string>;
 const PHRASES: Record<string, string> = content.phrases;
 const NUMBERS: Record<'nom' | 'gen', string[]> = content.numbers;
 const STRESS: Record<string, string> = content.stress;
+/** Voice settings per speaker; a phrase id "rumb.…" is spoken by "rumb". */
+export const SPEAKERS: Record<string, { voice: string; emotion: string; speed: string; pitch: number }> = content.speakers;
+/** The child's name the clips are generated with, with its stress mark. */
+export const CHILD = content.child;
+
+/**
+ * Name the game addresses the child by. When it differs from the name the clips
+ * were generated with, phrases with {name} go to the browser voice.
+ */
+let childName = CHILD.name;
+export function setChildName(name: string) {
+  childName = name.trim() || CHILD.name;
+}
+const NAME = /\{name\}/g;
+
+export function speakerOf(id: string): string | undefined {
+  const head = id.split('.')[0]!;
+  return SPEAKERS[head] ? head : undefined;
+}
 
 const SLOT = /\{(\w+)(?::(gen|text))?\}/g;
 const HAS_LETTER = /[\p{L}\p{N}]/u;
@@ -72,8 +93,11 @@ export function textSeg(text: string): Seg {
 
 /** Builds the utterance for a phrase from phrases.json. */
 export function phrase(id: PhraseId, params: Params = {}): Utterance {
-  const tpl = PHRASES[id];
-  if (tpl === undefined) throw new Error(`Unknown phrase ${id}`);
+  const raw = PHRASES[id];
+  if (raw === undefined) throw new Error(`Unknown phrase ${id}`);
+  // {name} is not a clip boundary: clips are generated with the name inside, so it sounds whole.
+  const named = raw.includes('{name}');
+  const tpl = raw.replace(NAME, CHILD.say);
   const segs: Seg[] = [];
   const hasSlots = tpl.search(SLOT) >= 0;
   let last = 0;
@@ -88,7 +112,14 @@ export function phrase(id: PhraseId, params: Params = {}): Utterance {
     last = m.index + m[0].length;
   }
   if (last < tpl.length) segs.push(staticSeg(hasSlots ? `${id}.${piece}` : id, tpl.slice(last)));
-  return { show: segs.map((s) => s.show).join(''), segs };
+  if (named && childName !== CHILD.name) {
+    for (const sg of segs) {
+      sg.show = sg.show.split(CHILD.name).join(childName);
+      sg.say = sg.say.split(CHILD.say).join(childName);
+      sg.voiced = false;
+    }
+  }
+  return { show: segs.map((s) => s.show).join(''), segs, speaker: speakerOf(id) };
 }
 
 /** Any string, e.g. from a scene not moved to phrases.json yet: one clip keyed by its text. */
@@ -108,7 +139,7 @@ export function allClips(texts: Iterable<string>): Map<string, string> {
     if (s.say && s.voiced) out.set(s.id, s.say);
   };
   for (const id of Object.keys(PHRASES)) {
-    const tpl = PHRASES[id]!;
+    const tpl = PHRASES[id]!.replace(NAME, '');
     // Static pieces only: fill slots with anything, then drop the slot clips.
     const dummy: Params = {};
     for (const m of tpl.matchAll(SLOT)) dummy[m[1]!] = m[2] === 'text' ? '' : 0;

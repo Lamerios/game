@@ -8,11 +8,22 @@ import type { Profile, SessionState, SessionTask, SkillId } from './types';
  */
 export const ISLAND_SKILLS: readonly SkillId[] = ['reading', 'math', 'chess'];
 export const TASKS_PER_ISLAND = 3;
+export const CALIBRATION_SESSIONS = 3;
 
 const HOUR_MS = 60 * 60 * 1000;
 
 /** Builds the task list for the next island. Pure: same input, same output. */
-export function buildIsland(profile: Profile, now: number): SessionTask[] {
+export function buildIsland(profile: Profile, now: number, focus?: SkillId): SessionTask[] {
+  const base = buildBase(profile, now);
+  if (!focus) return base;
+  // "Star" task: the island's main skill one level up, placed before the last
+  // (easiest) task so the session still ends on a success.
+  const st = profile.skills[focus];
+  const star: SessionTask = { skill: focus, level: Math.min(st.maxLevel, st.level + 1), isReview: false, star: true };
+  return [...base.slice(0, -1), star, ...base.slice(-1)];
+}
+
+function buildBase(profile: Profile, now: number): SessionTask[] {
   const skills = [...ISLAND_SKILLS];
   const count = Math.min(TASKS_PER_ISLAND, skills.length);
 
@@ -43,11 +54,11 @@ export function buildIsland(profile: Profile, now: number): SessionTask[] {
   });
 }
 
-export function startSession(profile: Profile, now: number): SessionState {
+export function startSession(profile: Profile, now: number, focus?: SkillId): SessionState {
   return {
     islandIndex: profile.route.islandIndex,
     startedAt: now,
-    tasks: buildIsland(profile, now),
+    tasks: buildIsland(profile, now, focus),
     done: 0,
   };
 }
@@ -88,10 +99,12 @@ export function isTimeUp(session: SessionState, profile: Profile, now: number): 
 
 /** Closes the session: logs it, advances the route, clears calibration. */
 export function finishSession(profile: Profile, now: number, islandsInOcean = 5): Profile {
+  // Calibration runs for the first three sessions: one session gives too few samples per skill.
+  const calibrating = profile.sessionLog.length + 1 < CALIBRATION_SESSIONS;
   return {
     ...profile,
     currentSession: undefined,
-    calibrating: false,
+    calibrating,
     sessionLog: [...profile.sessionLog, now].slice(-50),
     route: {
       ...profile.route,

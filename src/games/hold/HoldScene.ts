@@ -42,12 +42,14 @@ export class HoldScene extends MiniGameScene {
     this.pieces = [];
     this.gridCells = [];
     this.counter = undefined;
-    this.cameras.main.setBackgroundColor(COLORS.seaLight);
-    this.add.rectangle(W / 2, H - 110, W, 220, COLORS.wood); // dock
+    this.add.image(W / 2, H / 2, 'bg-harbor').setDisplaySize(W, H);
+    this.add.rectangle(W / 2, H - 110, W, 220, 0xa5683a).setStrokeStyle(6, 0x2b2d42); // dock
+    // The ship's hold.
+    this.add.rectangle(GRID_X - 30, GRID_Y - 30, 10 * CELL + 60, 330, 0x5c3317, 0.85).setOrigin(0).setStrokeStyle(6, 0x2b2d42);
 
     const t = this.hold;
     this.add
-      .text(60, 60, this.goalText(), { fontFamily: FONT, fontSize: '56px', color: '#0b2233' })
+      .text(60, 60, this.goalText(), { fontFamily: FONT, fontSize: '56px', color: '#ffffff', stroke: '#0b2233', strokeThickness: 8 })
       .setOrigin(0, 0.5);
 
     if (t.kind === 'missing') {
@@ -57,7 +59,7 @@ export class HoldScene extends MiniGameScene {
       const values = t.kind === 'load' ? t.cargo : t.start;
       values.forEach((v) => this.addPiece(v, t.kind === 'unload'));
       if (t.showCounter) {
-        this.counter = this.add.text(GRID_X + 10 * CELL + 40, GRID_Y + 20, '', { fontFamily: FONT, fontSize: '56px', color: '#0b2233' });
+        this.counter = this.add.text(GRID_X + 10 * CELL + 50, GRID_Y - 20, '', { fontFamily: FONT, fontSize: '56px', color: '#ffffff', stroke: '#0b2233', strokeThickness: 8 });
       }
       this.refresh();
       button(this, W - 230, H - 110, 'Отчаливаем!', () => this.check(), { w: 380, color: COLORS.leaf });
@@ -89,11 +91,13 @@ export class HoldScene extends MiniGameScene {
   private addPiece(value: number, inHold: boolean) {
     const w = Math.min(value, 5) * 22 + 20;
     const rows = Math.ceil(value / 5);
-    const g = this.add.graphics();
+    const g = this.add.container(0, 0);
     for (let i = 0; i < value; i++) {
-      g.fillStyle(0xb5651d).fillRect(-w / 2 + 10 + (i % 5) * 22, -rows * 11 + Math.floor(i / 5) * 22, 20, 20);
+      g.add(this.add.image(-w / 2 + 20 + (i % 5) * 22, -rows * 11 + Math.floor(i / 5) * 22 + 10, 'crate').setDisplaySize(24, 24));
     }
-    const label = this.add.text(0, rows * 11 + 26, String(value), { fontFamily: FONT, fontSize: '40px', color: '#ffffff' }).setOrigin(0.5);
+    const label = this.add
+      .text(0, rows * 11 + 26, String(value), { fontFamily: FONT, fontSize: '40px', color: '#ffffff', stroke: '#2b2d42', strokeThickness: 6 })
+      .setOrigin(0.5);
     const hit = this.add.rectangle(0, 20, Math.max(w, 110), 150, 0xffffff, 0.001);
     const view = this.add.container(0, 0, [hit, g, label]).setSize(Math.max(w, 110), 150).setInteractive({ useHandCursor: true });
     const piece: Piece = { value, inHold, view };
@@ -117,7 +121,7 @@ export class HoldScene extends MiniGameScene {
       }
     });
     const loaded = this.loaded();
-    this.gridCells.forEach((c, i) => c.setFillStyle(i < loaded ? 0xb5651d : 0x3d2b1f, i < loaded ? 1 : 0.35));
+    this.gridCells.forEach((c, i) => c.setFillStyle(i < loaded ? 0xd4a373 : 0x3d2b1f, i < loaded ? 1 : 0.35));
     this.counter?.setText(String(loaded));
   }
 

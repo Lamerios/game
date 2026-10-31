@@ -5,10 +5,8 @@ import { mulberry32, type Rng } from './rng';
 import type { SessionTask } from '../../core/types';
 import type { GameState } from '../../game-state';
 import { Attempt, LOCK_AFTER_FORCED_HINT_MS, type HintStep } from './attempt';
-import { blocks, COLORS, FONT, W } from '../../scenes/ui';
+import { COLORS, FONT, W } from '../../scenes/ui';
 
-const PARROT = ['..RR..', '.RRRY.', '.RRR..', 'RRGG..', '.GGG..', '..YY..'];
-const PARROT_PALETTE = { R: 0xd62828, Y: 0xfcbf49, G: 0x2a9d8f };
 
 /**
  * Base for every mini-game: parrot (repeat / help), speech bubble, the hint
@@ -39,17 +37,25 @@ export abstract class MiniGameScene extends Phaser.Scene {
     this.locked = false;
     this.finished = false;
     this.bubble = undefined;
+    this.repeated = false;
+    this.instructionOnScreen = false;
   }
 
   protected addParrot() {
-    const g = blocks(this, W - 140, 24, PARROT, 16, PARROT_PALETTE);
-    const hit = this.add.rectangle(W - 92, 72, 112, 112, 0, 0).setInteractive({ useHandCursor: true });
+    const g = this.add.image(W - 84, 74, 'char-rumb').setDisplaySize(130, 130).setDepth(9);
+    this.tweens.add({ targets: g, angle: 4, yoyo: true, repeat: -1, duration: 1100, ease: 'Sine.easeInOut' });
+    if (this.task.star) {
+      this.add
+        .text(20, 680, '★ Задача со звёздочкой', { fontFamily: FONT, fontSize: '26px', color: '#3d2b1f', backgroundColor: '#ffd166', padding: { x: 10, y: 4 } })
+        .setDepth(9);
+    }
+    const hit = this.add.rectangle(W - 84, 74, 130, 130, 0, 0).setInteractive({ useHandCursor: true }).setDepth(9);
     hit.on('pointerup', () => {
       if (this.locked || this.finished) return;
       // First tap repeats; later taps climb the ladder.
       if (this.attempt.hint === 0 && !this.repeated) {
         this.repeated = true;
-        this.say(this.instruction());
+        this.say(this.instruction(), !this.instructionOnScreen);
       } else {
         this.showHint(this.attempt.askHelp());
       }
@@ -57,10 +63,13 @@ export abstract class MiniGameScene extends Phaser.Scene {
     return g;
   }
   private repeated = false;
+  /** The instruction is already printed on screen (e.g. a puzzle's question): voice it without a bubble. */
+  protected instructionOnScreen = false;
 
   /** Speaks a line (phrase from content/phrases.json, or plain text) and shows it in the bubble. */
-  protected say(line: Utterance | string) {
+  protected say(line: Utterance | string, withBubble = true) {
     voice.say(line);
+    if (!withBubble) return;
     const text = typeof line === 'string' ? line : line.show;
     this.bubble?.destroy();
     const t = this.add.text(0, 0, text, {
