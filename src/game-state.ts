@@ -54,6 +54,20 @@ export class GameState {
     await this.save();
   }
 
+  /** Records the sea crossing (algo skill), which runs on top of the island's tasks. */
+  async completeCrossing(outcome: Outcome, itemId: string, hintsUsed: number, durationMs: number, now = Date.now()) {
+    const session = this.profile.currentSession;
+    if (!session) return;
+    const st = this.profile.skills.algo;
+    this.profile = {
+      ...this.profile,
+      skills: { ...this.profile.skills, algo: recordOutcome(st, outcome, now, this.profile.calibrating).state },
+      currentSession: { ...session, crossingDone: true },
+    };
+    await this.storage.logAttempt({ ts: now, skill: 'algo', level: st.level, itemId, outcome, hintsUsed, durationMs });
+    await this.save();
+  }
+
   timeUp(now = Date.now()) {
     const s = this.profile.currentSession;
     return s ? isTimeUp(s, this.profile, now) : false;
