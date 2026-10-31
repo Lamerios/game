@@ -41,6 +41,8 @@ export interface SessionState {
   tasks: SessionTask[];
   /** How many tasks from `tasks` are done. */
   done: number;
+  /** The sea crossing ("Course plotting", algo skill) before the island is done. */
+  crossingDone?: boolean;
 }
 
 export interface Profile {

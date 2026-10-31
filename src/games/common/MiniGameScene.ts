@@ -20,6 +20,8 @@ export abstract class MiniGameScene extends Phaser.Scene {
   protected rng!: Rng;
   protected locked = false;
   private bubble?: Phaser.GameObjects.Container;
+  /** Max text width of the parrot's bubble; scenes with a busy right side make it narrower. */
+  protected bubbleWidth = 340;
   private finished = false;
 
   /** Spoken instruction for the current task. */
@@ -62,7 +64,7 @@ export abstract class MiniGameScene extends Phaser.Scene {
       fontFamily: FONT,
       fontSize: '30px',
       color: '#0b2233',
-      wordWrap: { width: 340 },
+      wordWrap: { width: this.bubbleWidth },
     });
     const pad = 16;
     const bg = this.add
@@ -70,7 +72,12 @@ export abstract class MiniGameScene extends Phaser.Scene {
       .setOrigin(0)
       .setStrokeStyle(4, 0x0b2233);
     // Under the parrot, at the right edge, so it never covers the task itself.
-    this.bubble = this.add.container(W - 40 - pad - t.width, 150, [bg, t]).setDepth(10);
+    const bubble = this.add.container(W - 40 - pad - t.width, 150, [bg, t]).setDepth(10);
+    this.bubble = bubble;
+    // Fade out so the bubble never blocks the board for long; the parrot repeats on tap.
+    this.time.delayedCall(Math.max(4000, text.length * 90), () => {
+      if (this.bubble === bubble) this.tweens.add({ targets: bubble, alpha: 0, duration: 300, onComplete: () => bubble.destroy() });
+    });
   }
 
   /** Call on a wrong answer. */
@@ -90,12 +97,17 @@ export abstract class MiniGameScene extends Phaser.Scene {
     this.finished = true;
     this.locked = true;
     if (!this.attempt.solutionShown) this.say(nextPraise());
+    await this.report();
+    this.time.delayedCall(1200, () => this.scene.start('Island'));
+  }
+
+  /** Stores the outcome. Island tasks go to the session; the crossing overrides this. */
+  protected async report() {
     await this.state.completeTask(
       this.attempt.outcome(),
       this.itemId(),
       this.attempt.hintsUsed,
       Date.now() - this.attempt.startedAt,
     );
-    this.time.delayedCall(1200, () => this.scene.start('Island'));
   }
 }
