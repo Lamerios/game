@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { phrase } from '../../core/phrases';
 import { button, COLORS, FONT, H, W } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
 import { MiniGameScene } from '../common/MiniGameScene';
@@ -31,9 +32,9 @@ export class HoldScene extends MiniGameScene {
 
   protected instruction() {
     const t = this.hold;
-    if (t.kind === 'load') return `Загрузи в трюм ровно ${t.target}. Нажимай на грузы на причале.`;
-    if (t.kind === 'unload') return `В трюме слишком много. Выгрузи так, чтобы осталось ${t.leave}.`;
-    return `В трюме было ${t.was}. Потом погрузили ещё, и стало ${t.became}. Сколько погрузили?`;
+    if (t.kind === 'load') return phrase('hold.load', { n: t.target });
+    if (t.kind === 'unload') return phrase('hold.unload', { n: t.leave });
+    return phrase('hold.missing', { a: t.was, b: t.became });
   }
 
   create() {
@@ -137,7 +138,7 @@ export class HoldScene extends MiniGameScene {
       void this.finish();
       return;
     }
-    if (loaded > this.target()) this.say(`Перегруз! Сколько лишнего?`);
+    if (loaded > this.target()) this.say(phrase('hold.overload'));
     this.wrong();
   }
 
@@ -165,13 +166,13 @@ export class HoldScene extends MiniGameScene {
       return;
     }
     if (step === 2) {
-      if (t.kind === 'missing') this.say(`Начни с ${t.was} и досчитай до ${t.became}. Сколько шагов?`);
-      else this.say(`Сейчас в трюме ${this.loaded()}. А нужно ${this.target()}.`);
+      if (t.kind === 'missing') this.say(phrase('hold.hint.count', { a: t.was, b: t.became }));
+      else this.say(phrase('hold.hint.now', { a: this.loaded(), b: this.target() }));
       return;
     }
     if (step === 3) {
       if (t.kind === 'missing') {
-        this.say(`${t.was} и ещё сколько будет ${t.became}?`);
+        this.say(phrase('hold.hint.more', { a: t.was, b: t.became }));
         return;
       }
       const sol = this.solution();
@@ -179,19 +180,19 @@ export class HoldScene extends MiniGameScene {
         t.kind === 'load'
           ? this.pieces.find((p, i) => sol.includes(i) && !p.inHold)
           : this.pieces.find((p, i) => !sol.includes(i) && p.inHold);
-      this.say(t.kind === 'load' ? 'Попробуй погрузить вот этот груз.' : 'Попробуй выгрузить вот этот груз.');
+      this.say(phrase(t.kind === 'load' ? 'hold.hint.load' : 'hold.hint.unload'));
       if (first) this.tweens.add({ targets: first.view, alpha: 0.4, yoyo: true, repeat: 3, duration: 250 });
       return;
     }
     // Step 4: show the solution.
     this.locked = true;
     if (t.kind === 'missing') {
-      this.say(`${t.was} и ещё ${t.answer} — это ${t.became}. Погрузили ${t.answer}.`);
+      this.say(phrase('hold.solution.missing', { a: t.was, b: t.became, c: t.answer }));
     } else {
       const sol = this.solution();
       this.pieces.forEach((p, i) => (p.inHold = sol.includes(i)));
       this.refresh();
-      this.say(`Смотри: вот так получается ровно ${this.target()}.`);
+      this.say(phrase('hold.solution', { n: this.target() }));
     }
     this.time.delayedCall(2500, () => void this.finish());
   }

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { nextPraise, voice } from '../../core/audio';
+import type { Utterance } from '../../core/phrases';
 import { mulberry32, type Rng } from './rng';
 import type { SessionTask } from '../../core/types';
 import type { GameState } from '../../game-state';
@@ -23,7 +24,7 @@ export abstract class MiniGameScene extends Phaser.Scene {
   private finished = false;
 
   /** Spoken instruction for the current task. */
-  protected abstract instruction(): string;
+  protected abstract instruction(): Utterance | string;
   /** Show hint step 1..4. Step 4 must lead to `finish()`. */
   protected abstract showHint(step: HintStep): void;
   protected abstract itemId(): string;
@@ -55,8 +56,10 @@ export abstract class MiniGameScene extends Phaser.Scene {
   }
   private repeated = false;
 
-  protected say(text: string) {
-    voice.say(text);
+  /** Speaks a line (phrase from content/phrases.json, or plain text) and shows it in the bubble. */
+  protected say(line: Utterance | string) {
+    voice.say(line);
+    const text = typeof line === 'string' ? line : line.show;
     this.bubble?.destroy();
     const t = this.add.text(0, 0, text, {
       fontFamily: FONT,

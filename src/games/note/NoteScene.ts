@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { phrase } from '../../core/phrases';
 import { blocks, COLORS, FONT, W } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
 import { MiniGameScene } from '../common/MiniGameScene';
@@ -38,7 +39,7 @@ export class NoteScene extends MiniGameScene {
   }
 
   protected instruction() {
-    return 'Прочитай записку из бутылки и сделай, что там написано.';
+    return phrase('note.instruction');
   }
 
   protected itemId() {
@@ -103,30 +104,30 @@ export class NoteScene extends MiniGameScene {
 
   protected showHint(step: HintStep) {
     if (step === 1) {
-      this.say('Посмотри на записку ещё раз. Читай по слогам.');
+      this.say(phrase('note.hint1'));
       return;
     }
     if (step === 2) {
-      this.say('Нажми на записку — я прочитаю её с тобой.');
+      this.say(phrase('note.hint2'));
       if (!this.readAloudBtn) {
         this.readAloudBtn = this.add
           .text(NOTE_X, 250, 'Прочитай мне', { fontFamily: FONT, fontSize: '32px', color: '#0b2233', backgroundColor: '#ffffff', padding: { x: 12, y: 6 } })
           .setOrigin(0.5)
           .setInteractive({ useHandCursor: true })
-          .on('pointerup', () => this.say(this.note.text));
+          .on('pointerup', () => this.say(phrase('note.read', { t: this.note.text })));
       }
       return;
     }
     const target = this.note.targets[this.nextTarget];
     if (!target) return;
     if (step === 3) {
-      this.say('Вот подсказка. Куда нужно идти сейчас?');
+      this.say(phrase('note.hint3'));
       this.tweens.add({ targets: this.views.get(target)!, alpha: 0.4, yoyo: true, repeat: 3, duration: 250 });
       return;
     }
     // Step 4: show the solution, then move on.
     this.locked = true;
-    this.say(`Здесь написано: ${this.note.text} Смотри.`);
+    this.say(phrase('note.solution', { t: this.note.text }));
     const rest = this.note.targets.slice(this.nextTarget);
     rest.forEach((id, i) => this.time.delayedCall(1200 * (i + 1), () => this.mark(id)));
     this.time.delayedCall(1200 * (rest.length + 1), () => void this.finish());

@@ -1,0 +1,41 @@
+name: Voice-over (SpeechKit)
+# Manual run: Actions → "Voice-over (SpeechKit)" → Run workflow, pick the branch.
+# Needs the repository secret YANDEX_SPEECHKIT_API_KEY (Settings → Secrets and variables → Actions).
+# Synthesises only new or changed clips, then commits public/audio to the same branch.
+on:
+  workflow_dispatch:
+    inputs:
+      voice:
+        description: 'SpeechKit voice (alena, filipp, ermil, jane, …)'
+        default: 'alena'
+      emotion:
+        description: "Emotion ('good', 'neutral', or empty)"
+        default: 'good'
+      speed:
+        description: 'Speed (0.1–3.0)'
+        default: '0.9'
+permissions:
+  contents: write
+concurrency:
+  group: tts-${{ github.ref }}
+jobs:
+  tts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run tts
+        env:
+          YANDEX_SPEECHKIT_API_KEY: ${{ secrets.YANDEX_SPEECHKIT_API_KEY }}
+          TTS_VOICE: ${{ inputs.voice }}
+          TTS_EMOTION: ${{ inputs.emotion }}
+          TTS_SPEED: ${{ inputs.speed }}
+      - name: Commit audio
+        run: |
+          git add public/audio
+          if git diff --cached --quiet; then echo "No changes."; exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='41898333+github-actions[bot]@users.noreply.github.com' \
+            commit -m "Voice-over: regenerate SpeechKit clips (${{ inputs.voice }})"
+          git push
