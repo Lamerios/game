@@ -91,52 +91,61 @@ export interface BarrelsTask {
   level: number;
   /** Targets, one per round. */
   targets: number[];
-  minValue: number;
-  maxValue: number;
+  /** Values the barrels can carry. From L5 there are tens (10, 20, 30) for numbers up to 100. */
+  values: number[];
   /** Barrels show dots (subitising, counting) instead of digits. */
   dots: boolean;
+  /** Hold drawn as a hundred square (10×10) instead of ten-frames. */
+  hundred: boolean;
   crossSec: number;
   itemId: string;
 }
 
+const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+/**
+ * Up to 20: ten-frames, composing small numbers. From L5 up to 100: tens and
+ * ones, so 47 is made as 10 + 10 + 10 + 10 + 7 or 20 + 20 + 7 (place value).
+ */
 export function generateBarrels(level: number, rng: Rng): BarrelsTask {
   const lvl = Math.min(BARRELS_MAX_LEVEL, Math.max(1, level));
-  const spec: [number, number, number, number][] = [
-    // target min, target max, value min, value max
-    [3, 5, 1, 1],
-    [5, 8, 1, 2],
-    [6, 10, 1, 3],
-    [8, 10, 1, 4],
-    [10, 15, 2, 5],
-    [12, 20, 2, 6],
-    [15, 20, 3, 9],
+  const spec: [number, number, number[]][] = [
+    // target min, target max, barrel values
+    [3, 5, [1]],
+    [5, 8, [1, 2]],
+    [6, 10, [1, 2, 3]],
+    [10, 20, range(2, 6)],
+    [20, 50, [...range(2, 9), 10]],
+    [30, 80, [...range(3, 9), 10, 20]],
+    [50, 100, [...range(1, 9), 10, 20, 30]],
   ];
-  const [tMin, tMax, vMin, vMax] = spec[lvl - 1]!;
+  const [tMin, tMax, values] = spec[lvl - 1]!;
   const targets = [int(rng, tMin, tMax), int(rng, tMin, tMax)];
   return {
     level: lvl,
     targets,
-    minValue: vMin,
-    maxValue: vMax,
+    values,
     dots: lvl <= 3,
-    crossSec: lvl <= 2 ? 10 : lvl <= 5 ? 8.5 : 7.5,
+    hundred: tMax > 20,
+    crossSec: lvl <= 2 ? 10 : lvl <= 4 ? 8.5 : 8,
     itemId: `barrels${lvl}-${targets.join('-')}`,
   };
 }
 
 /**
  * Value of the next barrel. Keeps the round solvable: if no barrel in the air
- * fits what is left, the next one does; near the end the exact remainder shows up often.
+ * fits what is left, the next one does; near the end the exact remainder shows
+ * up often; while a lot is left, tens come more often.
  */
 export function nextBarrel(rng: Rng, t: BarrelsTask, left: number, inAir: number[]): number {
   const fits = inAir.some((v) => v <= left);
-  const top = Math.min(t.maxValue, left);
-  if (left <= t.maxValue && left >= t.minValue && rng() < 0.4) return left;
-  if (!fits || rng() < 0.6) {
-    if (top >= t.minValue) return int(rng, t.minValue, top);
-    return left; // smaller than any regular barrel: a small one comes
-  }
-  return int(rng, t.minValue, t.maxValue);
+  const ok = t.values.filter((v) => v <= left);
+  if (t.values.includes(left) && rng() < 0.4) return left;
+  if (!ok.length) return left; // smaller than any regular barrel: a small one comes
+  const tens = ok.filter((v) => v >= 10);
+  if (tens.length && left >= 20 && rng() < 0.5) return pick(rng, tens);
+  if (!fits || rng() < 0.6) return pick(rng, ok);
+  return pick(rng, t.values);
 }
 
 // ---------- buoys: patterns ----------

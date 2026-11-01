@@ -13,7 +13,7 @@ const FRAME_Y = 90;
 
 /**
  * "Бочки за бортом" (math): load exactly N. The hold is a ten-frame (two for
- * N > 10); barrels with 1–9 (dots on low levels) float by; a barrel that would
+ * N > 10, a hundred square above 20); barrels with 1–9 and tens float by; a barrel that would
  * overload the hold does not fit.
  */
 export class BarrelsScene extends SeaScene {
@@ -58,31 +58,47 @@ export class BarrelsScene extends SeaScene {
     this.say(this.instruction());
   }
 
-  /** Ten-frame hold. Up to level 4 only the N cells to fill are drawn; later the child works out the rest. */
+  /**
+   * Up to 20: ten-frames; up to level 3 only the N cells to fill are drawn,
+   * later the child works out the rest. Above 20: a hundred square, 10 per row.
+   */
   private drawHold() {
     this.hold?.destroy();
     this.loaded = 0;
     this.cells = [];
     const n = this.target;
-    const frames = n > 10 ? 2 : 1;
-    const shown = this.b.level <= 4 ? n : frames * 10;
     const items: Phaser.GameObjects.GameObject[] = [];
-    const w = frames * (5 * CELL + 24) + 40;
-    items.push(this.add.rectangle(FRAME_X - 20, FRAME_Y - 60, w + 200, 2 * CELL + 100, 0x5c3317, 0.92).setOrigin(0).setStrokeStyle(6, 0x2b2d42));
-    items.push(
-      this.add.text(FRAME_X, FRAME_Y - 45, `Нужно: ${n}`, { fontFamily: FONT, fontSize: '34px', color: '#ffd166' }),
-    );
-    for (let i = 0; i < shown; i++) {
-      const f = Math.floor(i / 10);
-      const k = i % 10;
-      const x = FRAME_X + f * (5 * CELL + 24) + (k % 5) * CELL + CELL / 2;
-      const y = FRAME_Y + 10 + Math.floor(k / 5) * CELL + CELL / 2;
-      const cell = this.add.rectangle(x, y, CELL - 6, CELL - 6, 0x8d5524).setStrokeStyle(3, 0xffd166);
+    const cellAt: [number, number][] = [];
+    let w: number;
+    let h: number;
+    let size: number;
+    if (this.b.hundred) {
+      size = 24;
+      w = 10 * size + 20;
+      h = 10 * size;
+      const rows = Math.ceil(n / 10);
+      for (let i = 0; i < rows * 10; i++) cellAt.push([FRAME_X + (i % 10) * size + size / 2 + Math.floor((i % 10) / 5) * 8, FRAME_Y - 10 + Math.floor(i / 10) * size + size / 2]);
+    } else {
+      size = CELL;
+      const frames = n > 10 ? 2 : 1;
+      w = frames * (5 * CELL + 24);
+      h = 2 * CELL;
+      const shown = this.b.level <= 3 ? n : frames * 10;
+      for (let i = 0; i < shown; i++) {
+        const f = Math.floor(i / 10);
+        const k = i % 10;
+        cellAt.push([FRAME_X + f * (5 * CELL + 24) + (k % 5) * CELL + CELL / 2, FRAME_Y + 10 + Math.floor(k / 5) * CELL + CELL / 2]);
+      }
+    }
+    items.push(this.add.rectangle(FRAME_X - 20, FRAME_Y - 60, w + 240, h + 90, 0x5c3317, 0.92).setOrigin(0).setStrokeStyle(6, 0x2b2d42));
+    items.push(this.add.text(FRAME_X + w + 20, FRAME_Y - 45, `Нужно: ${n}`, { fontFamily: FONT, fontSize: '34px', color: '#ffd166' }));
+    for (const [x, y] of cellAt) {
+      const cell = this.add.rectangle(x, y, size - (this.b.hundred ? 3 : 6), size - (this.b.hundred ? 3 : 6), 0x8d5524).setStrokeStyle(this.b.hundred ? 1 : 3, 0xffd166);
       this.cells.push(cell);
       items.push(cell);
     }
     this.counter = this.add
-      .text(FRAME_X + w + 60, FRAME_Y + CELL + 10, '0', { fontFamily: FONT, fontSize: '72px', color: '#ffffff', stroke: '#0b2233', strokeThickness: 8 })
+      .text(FRAME_X + w + 110, FRAME_Y + h / 2, '0', { fontFamily: FONT, fontSize: '72px', color: '#ffffff', stroke: '#0b2233', strokeThickness: 8 })
       .setOrigin(0.5);
     items.push(this.counter);
     this.hold = this.add.container(0, 0, items);
@@ -153,7 +169,7 @@ export class BarrelsScene extends SeaScene {
   private fill(from: number, to: number) {
     for (let i = from; i < to && i < this.cells.length; i++) {
       const cell = this.cells[i]!;
-      this.time.delayedCall((i - from) * 90, () => {
+      this.time.delayedCall((i - from) * Math.min(90, 900 / (to - from)), () => {
         cell.setFillStyle(0xffd166);
         this.tweens.add({ targets: cell, scale: 1.2, yoyo: true, duration: 120 });
       });
@@ -184,7 +200,8 @@ export class BarrelsScene extends SeaScene {
     const left = this.target - this.loaded;
     if (step === 1) return this.say(phrase('hold.hint.now', { a: this.loaded, b: this.target }));
     if (step === 2) {
-      return this.say(this.b.level <= 4 ? phrase('barrels.hint.2') : phrase('barrels.hint.2b', { b: this.target }));
+      if (this.b.level <= 3) return this.say(phrase('barrels.hint.2'));
+      return this.say(this.b.hundred && left >= 10 ? phrase('barrels.hint.tens') : phrase('barrels.hint.2b', { b: this.target }));
     }
     if (step === 3) {
       this.say(phrase('barrels.hint.3'));

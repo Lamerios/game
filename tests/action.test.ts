@@ -75,7 +75,22 @@ describe('barrels (exactly N)', () => {
         expect(clips.has(`num.gen.${n}`)).toBe(true);
       }
       expect(t.dots).toBe(level <= 3);
-      if (t.dots) expect(t.maxValue).toBeLessThanOrEqual(3);
+      if (t.dots) expect(Math.max(...t.values)).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('top levels reach 100 with tens and ones', () => {
+    const rng = mulberry32(9);
+    const t = generateBarrels(BARRELS_MAX_LEVEL, rng);
+    expect(t.hundred).toBe(true);
+    expect(t.values).toContain(10);
+    let max = 0;
+    for (let i = 0; i < 300; i++) max = Math.max(max, ...generateBarrels(BARRELS_MAX_LEVEL, rng).targets);
+    expect(max).toBe(100);
+    const clips = allClips([]);
+    for (let n = 0; n <= 100; n++) {
+      expect(clips.has(`num.nom.${n}`), `nom ${n}`).toBe(true);
+      expect(clips.has(`num.gen.${n}`), `gen ${n}`).toBe(true);
     }
   });
 });
