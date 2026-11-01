@@ -47,6 +47,8 @@ export interface SessionState {
   done: number;
   /** The sea crossing ("Course plotting", algo skill) before the island is done. */
   crossingDone?: boolean;
+  /** The action stage on the way (barrels, gulls or buoys), after the crossing. */
+  seaDone?: boolean;
 }
 
 export interface Profile {
