@@ -7,7 +7,7 @@
  *   YANDEX_SPEECHKIT_API_KEY=… npm run tts -- --samples alena,filipp,ermil,jane
  *                                                     # one sample per voice → audio-samples/
  *
- * Clips come from content/phrases.json (+ every note text). Each clip is
+ * Clips come from content/phrases.json (+ every note text and puzzle word). Each clip is
  * public/audio/<id>.mp3; public/audio/manifest.json keeps a hash of its text and
  * voice settings, so unchanged clips are never re-synthesised (and never re-billed).
  *
@@ -22,6 +22,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { allClips, SPEAKERS, speakerOf } from '../src/core/phrases';
 import { allNoteTexts } from '../src/games/note/generator';
+import { allPuzzleTexts } from '../src/games/puzzle/generator';
+import { SECRET_WORD } from '../src/story/script';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'public', 'audio');
@@ -97,7 +99,7 @@ async function samples(voices: string[]) {
 async function main() {
   if (samplesArg >= 0) return samples((args[samplesArg + 1] ?? 'alena,filipp,ermil,jane').split(','));
 
-  const clips = allClips(allNoteTexts());
+  const clips = allClips([...allNoteTexts(), ...allPuzzleTexts(), SECRET_WORD]);
   const old: Manifest = existsSync(MANIFEST)
     ? JSON.parse(readFileSync(MANIFEST, 'utf8'))
     : { voice: settings, clips: {} };

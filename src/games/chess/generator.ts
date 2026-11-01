@@ -1,4 +1,5 @@
 import { Chess, type Move, type PieceSymbol, type Square } from 'chess.js';
+import type { PhraseId } from '../../core/phrases';
 import { pick, shuffle, type Rng } from '../common/rng';
 
 export const CHESS_MAX_LEVEL = 5;
@@ -18,7 +19,8 @@ export interface ChessTask {
   correct: string[];
   /** For L2: the square of the piece in danger. */
   focus?: Square;
-  goal: string;
+  /** The task, spoken and shown (content/phrases.json). */
+  goal: PhraseId;
   itemId: string;
 }
 
@@ -58,11 +60,15 @@ function position(rng: Rng, white: PieceSymbol[], black: PieceSymbol[]): Chess |
   return c;
 }
 
-/** True if, after white's move, black can capture on `to`. */
+/**
+ * True if, after white's move, black can capture any white piece. Checking only
+ * the moved piece is not enough: e.g. the king takes safely, but the rook left
+ * behind is lost, and that must not count as a solution.
+ */
 function canBeTakenAfter(c: Chess, m: Move): boolean {
   const next = new Chess(c.fen());
   next.move({ from: m.from, to: m.to, promotion: 'q' });
-  return next.moves({ verbose: true }).some((r) => r.to === m.to && r.captured);
+  return next.moves({ verbose: true }).some((r) => r.captured);
 }
 
 function attackedSquares(c: Chess, color: 'w' | 'b'): Set<string> {
@@ -81,9 +87,11 @@ function tryLevel(level: number, rng: Rng): ChessTask | undefined {
       const c = position(rng, [pick(rng, ['r', 'b', 'n', 'q'] as const)], [pick(rng, ['n', 'b', 'r'] as const), pick(rng, ['p', 'n'] as const)]);
       if (!c) return;
       const caps = c.moves({ verbose: true }).filter((m) => m.captured && m.captured !== 'k');
-      const correct = caps.filter((m) => !canBeTakenAfter(c, m)).map(uci);
-      if (correct.length !== 1 || caps.length === 0) return;
-      return { level, fen: c.fen(), correct, goal: 'Забери фигуру так, чтобы тебя не съели в ответ.', itemId: `chess1-${c.fen()}` };
+      const safe = caps.filter((m) => !canBeTakenAfter(c, m));
+      // Exactly one way, and by the piece: a "safe" king capture would confuse the lesson.
+      if (safe.length !== 1 || safe[0]!.piece === 'k') return;
+      const correct = safe.map(uci);
+      return { level, fen: c.fen(), correct, goal: 'chess.goal.1', itemId: `chess1-${c.fen()}` };
     }
     case 2: {
       const c = position(rng, [pick(rng, ['r', 'b', 'n'] as const)], [pick(rng, ['r', 'b', 'n', 'q'] as const)]);
@@ -97,21 +105,21 @@ function tryLevel(level: number, rng: Rng): ChessTask | undefined {
       const moves = c.moves({ verbose: true }).filter((m) => m.from === focus);
       const correct = moves.filter((m) => !canBeTakenAfter(c, m)).map(uci);
       if (correct.length === 0 || correct.length === moves.length) return;
-      return { level, fen: c.fen(), correct, focus, goal: 'Твою фигуру сейчас съедят! Спаси её.', itemId: `chess2-${c.fen()}` };
+      return { level, fen: c.fen(), correct, focus, goal: 'chess.goal.2', itemId: `chess2-${c.fen()}` };
     }
     case 3: {
       const c = position(rng, [pick(rng, ['r', 'q', 'b', 'n'] as const)], []);
       if (!c) return;
       const checks = c.moves({ verbose: true }).filter((m) => m.san.includes('+') && !m.san.includes('#') && !canBeTakenAfter(c, m));
       if (checks.length < 1 || checks.length > 4) return;
-      return { level, fen: c.fen(), correct: checks.map(uci), goal: 'Объяви шах чёрному королю.', itemId: `chess3-${c.fen()}` };
+      return { level, fen: c.fen(), correct: checks.map(uci), goal: 'chess.goal.3', itemId: `chess3-${c.fen()}` };
     }
     case 4: {
       const c = edgeMatePosition(rng, pick(rng, ['q', 'r'] as const));
       if (!c) return;
       const mates = c.moves({ verbose: true }).filter((m) => m.san.includes('#'));
       if (mates.length < 1 || mates.length > 2) return;
-      return { level, fen: c.fen(), correct: mates.map(uci), goal: 'Поставь мат в один ход.', itemId: `chess4-${c.fen()}` };
+      return { level, fen: c.fen(), correct: mates.map(uci), goal: 'chess.goal.4', itemId: `chess4-${c.fen()}` };
     }
     default: {
       const c = position(rng, ['n'], [pick(rng, ['r', 'q'] as const)]);
@@ -125,7 +133,7 @@ function tryLevel(level: number, rng: Rng): ChessTask | undefined {
         return targets.some((p) => p && p.color === 'b' && (p.type === 'r' || p.type === 'q'));
       });
       if (forks.length !== 1) return;
-      return { level: 5, fen: c.fen(), correct: forks.map(uci), goal: 'Найди вилку конём: шах и нападение сразу.', itemId: `chess5-${c.fen()}` };
+      return { level: 5, fen: c.fen(), correct: forks.map(uci), goal: 'chess.goal.5', itemId: `chess5-${c.fen()}` };
     }
   }
 }

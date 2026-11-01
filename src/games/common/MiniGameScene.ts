@@ -25,7 +25,7 @@ export abstract class MiniGameScene extends Phaser.Scene {
 
   /** Spoken instruction for the current task. */
   protected abstract instruction(): Utterance | string;
-  /** Show hint step 1..4. Step 4 must lead to `finish()`. */
+  /** Show hint step 1..4. Step 4 shows the solution and must lead to `finish()` (chess: once the child repeats the move). */
   protected abstract showHint(step: HintStep): void;
   protected abstract itemId(): string;
 
@@ -109,8 +109,14 @@ export abstract class MiniGameScene extends Phaser.Scene {
     this.finished = true;
     this.locked = true;
     if (!this.attempt.solutionShown) this.say(nextPraise());
-    await this.report();
-    this.time.delayedCall(1200, () => this.scene.start('Island'));
+    // Let the praise (or the solution) be heard to the end before the next screen talks over it.
+    await Promise.all([this.report(), this.afterSpeech(1200)]);
+    if (this.sys.isActive()) this.scene.start('Island');
+  }
+
+  /** Waits until the current line is spoken, and at least `minMs`. */
+  protected afterSpeech(minMs = 0): Promise<void> {
+    return Promise.all([voice.idle(), new Promise((r) => setTimeout(r, minMs))]).then(() => undefined);
   }
 
   /** Stores the outcome. Island tasks go to the session; the crossing overrides this. */

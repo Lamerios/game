@@ -31,6 +31,8 @@ export type Params = Record<string, number | string>;
 const PHRASES: Record<string, string> = content.phrases;
 const NUMBERS: Record<'nom' | 'gen', string[]> = content.numbers;
 const STRESS: Record<string, string> = content.stress;
+/** How a letter is named aloud ("Д" → "дэ"), for {x:letter} slots. */
+const LETTER_NAMES: Record<string, string> = content.letters;
 /** Voice settings per speaker; a phrase id "rumb.…" is spoken by "rumb". */
 export const SPEAKERS: Record<string, { voice: string; emotion: string; speed: string; pitch: number }> = content.speakers;
 /** The child's name the clips are generated with, with its stress mark. */
@@ -51,7 +53,7 @@ export function speakerOf(id: string): string | undefined {
   return SPEAKERS[head] ? head : undefined;
 }
 
-const SLOT = /\{(\w+)(?::(gen|text))?\}/g;
+const SLOT = /\{(\w+)(?::(gen|fem|text|letter))?\}/g;
 const HAS_LETTER = /[\p{L}\p{N}]/u;
 const WORD = /[а-яё]+/g;
 
@@ -77,7 +79,22 @@ function staticSeg(id: string, piece: string): Seg {
   return { id, show: unstress(piece), say, voiced: true };
 }
 
-export function numberSeg(n: number, grammaticalCase: 'nom' | 'gen' = 'nom'): Seg {
+export type NumberCase = 'nom' | 'gen' | 'fem';
+
+/** Feminine nominative ("одна монета", "две бочки"); undefined where it is the same as the masculine. */
+function femWord(n: number): string | undefined {
+  const nom = NUMBERS.nom[n];
+  if (nom === undefined) return undefined;
+  const fem = nom.replace(/од\+ин$/, 'одн+а').replace(/два$/, 'две');
+  return fem === nom ? undefined : fem;
+}
+
+export function numberSeg(n: number, grammaticalCase: NumberCase = 'nom'): Seg {
+  if (grammaticalCase === 'fem') {
+    const fem = femWord(n);
+    if (fem === undefined) return numberSeg(n, 'nom');
+    return { id: `num.fem.${n}`, show: String(n), say: fem, voiced: Number.isInteger(n) };
+  }
   const word = NUMBERS[grammaticalCase][n];
   return {
     id: `num.${grammaticalCase}.${n}`,
@@ -85,6 +102,11 @@ export function numberSeg(n: number, grammaticalCase: 'nom' | 'gen' = 'nom'): Se
     say: word ?? String(n),
     voiced: word !== undefined && Number.isInteger(n),
   };
+}
+
+export function letterSeg(letter: string): Seg {
+  const name = LETTER_NAMES[letter.toUpperCase()];
+  return { id: `letter.${letter.toUpperCase()}`, show: letter, say: name ?? letter, voiced: name !== undefined };
 }
 
 export function textSeg(text: string): Seg {
@@ -108,7 +130,9 @@ export function phrase(id: PhraseId, params: Params = {}): Utterance {
     const [, name, kind] = m;
     const v = params[name!];
     if (v === undefined) throw new Error(`Phrase ${id}: missing {${name}}`);
-    segs.push(kind === 'text' ? textSeg(String(v)) : numberSeg(Number(v), kind === 'gen' ? 'gen' : 'nom'));
+    segs.push(
+      kind === 'text' ? textSeg(String(v)) : kind === 'letter' ? letterSeg(String(v)) : numberSeg(Number(v), (kind ?? 'nom') as NumberCase),
+    );
     last = m.index + m[0].length;
   }
   if (last < tpl.length) segs.push(staticSeg(hasSlots ? `${id}.${piece}` : id, tpl.slice(last)));
@@ -120,6 +144,15 @@ export function phrase(id: PhraseId, params: Params = {}): Utterance {
     }
   }
   return { show: segs.map((s) => s.show).join(''), segs, speaker: speakerOf(id) };
+}
+
+/** Several phrases said as one line (e.g. an instruction with optional extra sentences). */
+export function join(...parts: Utterance[]): Utterance {
+  return {
+    show: parts.map((p) => p.show).join(' '),
+    segs: parts.flatMap((p, i) => (i === 0 ? p.segs : [{ id: '', show: ' ', say: '', voiced: true }, ...p.segs])),
+    speaker: parts[0]?.speaker,
+  };
 }
 
 /** Any string, e.g. from a scene not moved to phrases.json yet: one clip keyed by its text. */
@@ -142,10 +175,12 @@ export function allClips(texts: Iterable<string>): Map<string, string> {
     const tpl = PHRASES[id]!.replace(NAME, '');
     // Static pieces only: fill slots with anything, then drop the slot clips.
     const dummy: Params = {};
-    for (const m of tpl.matchAll(SLOT)) dummy[m[1]!] = m[2] === 'text' ? '' : 0;
+    for (const m of tpl.matchAll(SLOT)) dummy[m[1]!] = m[2] === 'text' ? '' : m[2] === 'letter' ? 'А' : 0;
     phrase(id as PhraseId, dummy).segs.filter((s) => s.id === id || s.id.startsWith(`${id}.`)).forEach(add);
   }
   for (const c of ['nom', 'gen'] as const) NUMBERS[c].forEach((_, n) => add(numberSeg(n, c)));
+  NUMBERS.nom.forEach((_, n) => add(numberSeg(n, 'fem')));
+  Object.keys(LETTER_NAMES).forEach((l) => add(letterSeg(l)));
   for (const t of texts) add(textSeg(t));
   return out;
 }

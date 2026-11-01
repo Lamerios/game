@@ -1,4 +1,6 @@
+import { phrase, type Params, type PhraseId, type Utterance } from '../../core/phrases';
 import { int, pick, shuffle, type Rng } from '../common/rng';
+import content from '../../../content/phrases.json';
 import { KINDS } from '../note/vocab';
 
 /**
@@ -25,13 +27,17 @@ export interface Puzzle {
   skill: 'math' | 'reading';
   kind: string;
   level: number;
-  /** The question. Math questions are read aloud; reading questions the child reads themself. */
+  /** The question as shown. Math questions are read aloud; reading questions the child reads themself. */
   text: string;
+  /** The question as spoken (its `show` is `text`). */
+  say: Utterance;
   visual: Visual;
   options: Option[];
   answer: number;
   /** Hints for steps 1–3 of the ladder; step 4 shows the answer. */
-  hints: [string, string, string];
+  hints: [Utterance, Utterance, Utterance];
+  /** Said when step 4 shows the answer. */
+  answerSay: Utterance;
   itemId: string;
 }
 
@@ -53,7 +59,16 @@ const plural = (n: number, one: string, few: string, many: string) => {
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
   return many;
 };
-export const coins = (n: number) => `${n} ${plural(n, 'монета', 'монеты', 'монет')}`;
+const coinWord = (n: number) => plural(n, 'монета', 'монеты', 'монет');
+
+/** Question + three hints from content/phrases.json: `id` and `<hintBase>.hint.1..3` (variant suffix `.N` dropped). */
+function lines(id: string, params: Params, hintParams: [Params, Params, Params] = [params, params, params], hintBase = id.replace(/\.\d+$/, '')) {
+  const say = phrase(id as PhraseId, params);
+  const hint = (i: 1 | 2 | 3) => phrase(`${hintBase}.hint.${i}` as PhraseId, hintParams[i - 1]);
+  return { say, text: say.show, hints: [hint(1), hint(2), hint(3)] as [Utterance, Utterance, Utterance] };
+}
+
+const numberAnswer = (n: number) => phrase('puzzle.answer', { n });
 
 // ---------- math ----------
 
@@ -70,13 +85,9 @@ export function generateMathPuzzle(level: number, rng: Rng): Puzzle {
       const o = numberOptions(rng, x, [total, known]);
       return {
         skill: 'math', kind, level, ...o,
-        text: `Весы Моржа уравновешены. Слева ящик на ${known} и ящик-загадка, справа гиря на ${total}. Сколько весит ящик-загадка?`,
+        ...lines('puzzle.scales', { a: known, b: total }),
+        answerSay: numberAnswer(x),
         visual: { type: 'scales', known, total },
-        hints: [
-          'Весы ровные: слева столько же, сколько справа.',
-          `Загадка и ${known} вместе дают ${total}.`,
-          `Посчитай от ${known} до ${total}. Сколько шагов?`,
-        ],
         itemId: `scales-${known}-${total}`,
       };
     }
@@ -87,13 +98,9 @@ export function generateMathPuzzle(level: number, rng: Rng): Puzzle {
       const o = numberOptions(rng, answer, [price + items, answer - price]);
       return {
         skill: 'math', kind, level, ...o,
-        text: `Одна бочка стоит ${coins(price)}. Нам нужно ${items} ${plural(items, 'бочка', 'бочки', 'бочек')}. Сколько монет отдать Моржу?`,
+        ...lines('puzzle.trade', { p: price, n: items, a: price, b: price * 2 }),
+        answerSay: numberAnswer(answer),
         visual: { type: 'trade', items, price },
-        hints: [
-          'За каждую бочку свои монеты.',
-          `Положи по ${price} монеты к каждой бочке.`,
-          `Считай двойками: ${Array.from({ length: items }, (_, i) => (i + 1) * price).slice(0, 2).join(', ')}…`,
-        ],
         itemId: `trade-${price}x${items}`,
       };
     }
@@ -105,13 +112,9 @@ export function generateMathPuzzle(level: number, rng: Rng): Puzzle {
         const o = numberOptions(rng, answer, [8, holding + rest]);
         return {
           skill: 'math', kind, level, ...o,
-          text: `У Кляксы 8 щупалец. В ${holding} он держит по одной монете, а в остальных — по две. Сколько монет у Кляксы?`,
+          ...lines('puzzle.octo2', { e: 8, h: holding, r: rest, d: rest * 2 }),
+          answerSay: numberAnswer(answer),
           visual: { type: 'octopus', holding, each: 1, rest },
-          hints: [
-            'Сначала узнай, в скольких щупальцах по две монеты.',
-            `По две монеты в ${rest} щупальцах. Это ${rest * 2}.`,
-            `${holding} и ещё ${rest * 2}. Сколько вместе?`,
-          ],
           itemId: `octo2-${holding}`,
         };
       }
@@ -120,9 +123,9 @@ export function generateMathPuzzle(level: number, rng: Rng): Puzzle {
       const o = numberOptions(rng, answer, [holding, 8]);
       return {
         skill: 'math', kind, level, ...o,
-        text: `У Кляксы 8 щупалец. В ${holding} он держит наши монеты. Сколько щупалец у него свободно?`,
+        ...lines('puzzle.octo1', { e: 8, h: holding }),
+        answerSay: numberAnswer(answer),
         visual: { type: 'octopus', holding, each: 1, rest: 0 },
-        hints: ['Посчитай щупальца без монет.', `Всего 8, заняты ${holding}.`, `От ${holding} до 8. Сколько шагов?`],
         itemId: `octo1-${holding}`,
       };
     }
@@ -131,12 +134,11 @@ export function generateMathPuzzle(level: number, rng: Rng): Puzzle {
       const each = int(rng, 2, level >= 5 ? 5 : 3);
       const total = crew * each;
       const o = numberOptions(rng, each, [total - crew, crew]);
-      const who = crew === 2 ? 'Румбу и Болтику' : 'Румбу, Болтику и Пыхтелкину';
       return {
         skill: 'math', kind, level, ...o,
-        text: `Раздели ${coins(total)} поровну: ${who}. Сколько монет получит каждый?`,
+        ...lines(`puzzle.share.${crew}`, { c: total, w: coinWord(total) }),
+        answerSay: numberAnswer(each),
         visual: { type: 'share', coins: total, crew },
-        hints: ['Поровну — это всем одинаково.', 'Раздавай по одной монете каждому по кругу.', `Попробуй дать каждому по ${each - 1}. Хватит? А останется?`],
         itemId: `share-${total}/${crew}`,
       };
     }
@@ -150,17 +152,18 @@ export function generateMathPuzzle(level: number, rng: Rng): Puzzle {
       const wrong1 = `${first}${up ? first - k : first + k}`;
       const wrong2 = `${second}${first}`;
       const opts = shuffle(rng, [...new Set([answer, wrong1, wrong2, `${first + 1}${second}`])].slice(0, 3));
+      const steps = `${k > 1 ? 'шага' : 'шаг'} ${up ? 'вперёд' : 'назад'}`;
       return {
         skill: 'math', kind: 'code', level,
-        text: `Код замка из двух цифр. Первая больше ${first - 1}, но меньше ${first + 1}. Вторая на ${k} ${up ? 'больше' : 'меньше'} первой.`,
+        ...lines(k === 1 ? 'puzzle.code.1' : 'puzzle.code', { a: first - 1, b: first + 1, k, cmp: up ? 'больше' : 'меньше' }, [
+          { a: first - 1 },
+          { f: first },
+          { f: first, k, steps },
+        ]),
+        answerSay: phrase('puzzle.answer.code', { a: first, b: second }),
         visual: { type: 'lock' },
         options: opts.map((l) => ({ label: l })),
         answer: opts.indexOf(answer),
-        hints: [
-          `Какое число стоит между ${first - 1} и ${first + 1}?`,
-          `Первая цифра ${first}.`,
-          `От ${first} сделай ${k} ${up ? 'шаг вперёд' : 'шаг назад'}${k > 1 ? 'а' : ''}.`,
-        ],
         itemId: `code-${answer}`,
       };
     }
@@ -173,24 +176,20 @@ const WORDS = ['ПАРУС', 'МАЧТА', 'ЯКОРЬ', 'ВОЛНА', 'КАРТ
 const VOWELS = ['А', 'О', 'У', 'Ы', 'И', 'Е', 'Я'];
 const CONSONANTS = ['Б', 'В', 'Г', 'Д', 'К', 'Л', 'М', 'Н', 'П', 'Р', 'С', 'Т', 'Ч', 'Ш'];
 
-const RIDDLES: Record<string, string[]> = {
-  crab: ['У меня есть клешни, а хожу я боком.', 'Я хожу боком и прячусь под камнем.'],
-  anchor: ['Я тяжёлый и железный. Я держу корабль на месте.', 'Меня бросают в воду, чтобы яхта не уплыла.'],
-  chest: ['Меня закрывают на замок. Внутри прячут клад.'],
-  palm: ['Я расту на песке. На макушке у меня орехи.'],
-  barrel: ['Я круглая и деревянная. Во мне хранят воду.'],
-  cannon: ['Я громко бухаю и стреляю ядрами.'],
-  turtle: ['Я хожу медленно и ношу свой дом на спине.'],
-  boat: ['У меня есть парус, но я меньше яхты.'],
-  stone: ['Я лежу на берегу. Я твёрдый, холодный и не умею двигаться.'],
-  flag: ['Я развеваюсь на ветру на высокой палке. По мне узнают корабль.'],
-};
+/** Riddles per object: phrases "puzzle.riddle.<id>.<n>" in content/phrases.json. */
+const RIDDLES: Record<string, PhraseId[]> = {};
+for (const id of Object.keys(content.phrases)) {
+  const m = /^puzzle\.riddle\.(\w+)\.\d+$/.exec(id);
+  if (m && m[1] !== 'hint') (RIDDLES[m[1]!] ??= []).push(id as PhraseId);
+}
 
 const ADJ_PREP = {
   red: { m: 'красном', f: 'красной' },
   blue: { m: 'синем', f: 'синей' },
   green: { m: 'зелёном', f: 'зелёной' },
 } as const;
+
+const PLACES = { chest: { prep: 'сундуке', g: 'm' }, barrel: { prep: 'бочке', g: 'f' }, boat: { prep: 'лодке', g: 'f' } } as const;
 
 export function generateReadingPuzzle(level: number, rng: Rng): Puzzle {
   const kinds = ['smudge', 'riddle'];
@@ -206,32 +205,32 @@ export function generateReadingPuzzle(level: number, rng: Rng): Puzzle {
     const opts = shuffle(rng, [right, ...shuffle(rng, pool.filter((l) => l !== right)).slice(0, 2)]);
     return {
       skill: 'reading', kind, level,
-      text: 'Клякса залил букву. Какая буква спряталась?',
+      ...lines('puzzle.smudge', {}, [{}, { l: letters[0]! }, { w: word.toLowerCase() }]),
+      answerSay: phrase('puzzle.answer.letter', { l: right }),
       visual: { type: 'note', text: word, blot },
       options: opts.map((l) => ({ label: l })),
       answer: opts.indexOf(right),
-      hints: ['Прочитай слово по слогам, а на кляксе подумай, какой звук там слышен.', `Это слово про море. Оно начинается на ${letters[0]}.`, `Здесь написано слово ${word.toLowerCase()}. Какой звук под кляксой?`],
       itemId: `smudge-${word}-${blot}`,
     };
   }
   if (kind === 'riddle') {
     const ids = Object.keys(RIDDLES);
     const answerId = pick(rng, ids);
-    const text = pick(rng, RIDDLES[answerId]!);
+    const riddle = pick(rng, RIDDLES[answerId]!);
     const opts = shuffle(rng, [answerId, ...shuffle(rng, ids.filter((i) => i !== answerId)).slice(0, 2)]);
     const name = KINDS.find((k) => k.id === answerId)!.nom;
     return {
       skill: 'reading', kind, level,
-      text: `Загадка Бороды: ${text} Кто я?`,
+      ...lines(riddle, {}, [{}, {}, { w: name }], 'puzzle.riddle'),
+      answerSay: phrase('puzzle.answer.picture'),
       visual: { type: 'none' },
       options: opts.map((id) => ({ key: `obj-${id}${['chest', 'barrel', 'boat', 'flag'].includes(id) ? '-red' : ''}` })),
       answer: opts.indexOf(answerId),
-      hints: ['Прочитай загадку ещё раз, медленно.', 'Подумай, у кого из них это бывает.', `Это ${name}?`],
       itemId: `riddle-${answerId}`,
     };
   }
   // Detective: where is the map? Three hiding places, the note rules out two.
-  const places = { chest: { prep: 'сундуке', g: 'm' }, barrel: { prep: 'бочке', g: 'f' }, boat: { prep: 'лодке', g: 'f' } } as const;
+  const places = PLACES;
   type Place = keyof typeof places;
   const [k1, k2] = shuffle(rng, Object.keys(places) as Place[]) as [Place, Place];
   const [c1, c2] = shuffle(rng, ['red', 'blue', 'green'] as const) as ['red' | 'blue' | 'green', 'red' | 'blue' | 'green'];
@@ -240,11 +239,24 @@ export function generateReadingPuzzle(level: number, rng: Rng): Puzzle {
   const adj = ADJ_PREP[c1][places[k1].g];
   return {
     skill: 'reading', kind: 'detective', level,
-    text: `Записка Бороды: «Карта не в ${places[k2].prep}. И она не в ${adj} ${places[k1].prep}». Где карта?`,
+    ...lines('puzzle.detective', { p: places[k2].prep, q: `${adj} ${places[k1].prep}` }),
+    answerSay: phrase('puzzle.answer.picture'),
     visual: { type: 'none' },
     options: suspects.map((s) => ({ key: `obj-${s}` })),
     answer: suspects.indexOf(answerKey),
-    hints: ['Прочитай записку ещё раз, по одному предложению.', `Карта не в ${places[k2].prep}. Что можно убрать?`, `И не в ${adj} ${places[k1].prep}. Что осталось?`],
     itemId: `detective-${answerKey}-${k2}`,
   };
+}
+
+/** Every free text a puzzle puts into a {x:text} slot, for tools/tts.ts. */
+export function allPuzzleTexts(): string[] {
+  const out = new Set<string>(['монета', 'монеты', 'монет', 'больше', 'меньше']);
+  for (const k of [1, 2]) for (const d of ['вперёд', 'назад']) out.add(`${k > 1 ? 'шага' : 'шаг'} ${d}`);
+  for (const w of WORDS) out.add(w.toLowerCase());
+  for (const k of KINDS) out.add(k.nom);
+  for (const { prep, g } of Object.values(PLACES)) {
+    out.add(prep);
+    for (const c of Object.values(ADJ_PREP)) out.add(`${c[g]} ${prep}`);
+  }
+  return [...out];
 }

@@ -89,12 +89,12 @@ export class LockScene extends MiniGameScene {
   }
 
   protected showHint(step: HintStep) {
-    if (step === 1) this.say('Подумай: кем стали тебе Румб, Болтик и Пыхтелкин?');
-    else if (step === 2) this.say('Это слово начинается на Д.');
-    else if (step === 3) this.say('Д, потом Р. А дальше?');
+    if (step === 1) this.say(phrase('lock.hint.1'));
+    else if (step === 2) this.say(phrase('lock.hint.2', { l: SECRET_WORD[0]! }));
+    else if (step === 3) this.say(phrase('lock.hint.3', { a: SECRET_WORD[0]!, b: SECRET_WORD[1]! }));
     else {
       this.locked = true;
-      this.say(`Здесь написано: ${SECRET_WORD}.`);
+      this.say(phrase('lock.solution', { t: SECRET_WORD }));
       [...SECRET_WORD].forEach((l, i) => {
         this.slots[i] = l;
         this.slotText[i]!.setText(l);
