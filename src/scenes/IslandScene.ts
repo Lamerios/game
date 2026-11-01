@@ -1,14 +1,16 @@
 import Phaser from 'phaser';
 import type { SkillId } from '../core/types';
 import type { GameState } from '../game-state';
-import { finds, islandOf, strelkaParts } from '../story/script';
-import { usePuzzle } from '../games/puzzle/mix';
+import { finds, ISLAND_FOCUS, islandOf, strelkaParts } from '../story/script';
+import { lettersInstead, usePuzzle } from '../games/puzzle/mix';
+import { SEA_SKILL, seaGame } from '../games/action/generators';
 import { button, COLORS, FONT, H, title, W } from './ui';
 
 const SCENE: Partial<Record<SkillId, string>> = { reading: 'Note', math: 'Hold', chess: 'Chess', algo: 'Course' };
 
 /**
- * Router of an episode: sea crossing (Course) → the island's tasks → what was
+ * Router of an episode: sea crossing (Course) → action stage (Barrels / Buoys /
+ * Gulls) → the island's tasks → what was
  * found (a story beat on an island's 2nd episode, the chest lock on the last) → Night.
  */
 export class IslandScene extends Phaser.Scene {
@@ -34,6 +36,17 @@ export class IslandScene extends Phaser.Scene {
       // Klyaksa's broken routes: always in the Foggy Reefs, otherwise every other episode.
       const variant = islandOf(ep) === 2 || ep % 2 === 1 ? 'debug' : undefined;
       this.scene.start('Course', { task: { skill: 'algo', level: algo.level, isReview: false, variant } });
+      return;
+    }
+    if (!session.seaDone) {
+      // Action stage on the way: catch barrels, letters or buoys.
+      const game = seaGame(ep, ISLAND_FOCUS[islandOf(ep)]);
+      const skill = SEA_SKILL[game];
+      this.scene.start(game, { task: { skill, level: state.profile.skills[skill].level, isReview: false, variant: 'sea' } });
+      return;
+    }
+    if (lettersInstead(session.tasks, session.done)) {
+      this.scene.start('Gulls', { task });
       return;
     }
     if (usePuzzle(task, session.done + ep)) {

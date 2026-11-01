@@ -241,3 +241,29 @@ export const NIGHT_BG = svg(1280, 720, `
   <circle cx="1060" cy="120" r="54" fill="#fdf0d5"/><circle cx="1084" cy="104" r="50" fill="#0f1a35"/>
   <rect y="470" width="1280" height="250" fill="#0d1b2a"/>
   <path d="M0 480 Q40 470 80 480 T160 480 T240 480 T320 480 T400 480 T480 480 T560 480 T640 480 T720 480 T800 480 T880 480 T960 480 T1040 480 T1120 480 T1200 480 T1280 480" fill="none" stroke="#415a77" stroke-width="4"/>`);
+
+/** A seagull with wings up, seen from the side; it carries a letter sign under it (drawn by the scene). */
+export const GULL = svg(160, 110, `
+  <path d="M80 62 C60 30 34 16 8 22 C34 30 52 46 62 66Z" fill="#e9ecef" ${S}/>
+  <path d="M80 62 C100 30 126 16 152 22 C126 30 108 46 98 66Z" fill="#e9ecef" ${S}/>
+  <ellipse cx="80" cy="70" rx="30" ry="18" fill="#ffffff" ${S}/>
+  <circle cx="104" cy="58" r="14" fill="#ffffff" ${S}/>
+  <path d="M116 58 L136 64 L116 68Z" fill="${PAINT.gold}" stroke="${OL}" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="106" cy="55" r="3.5" fill="${OL}"/>
+  <path d="M8 22 C20 22 28 26 32 30" fill="none" stroke="#6c757d" stroke-width="6" stroke-linecap="round"/>
+  <path d="M152 22 C140 22 132 26 128 30" fill="none" stroke="#6c757d" stroke-width="6" stroke-linecap="round"/>`);
+
+export const BUOY_PAINT = { red: PAINT.red, blue: PAINT.blue, yellow: PAINT.gold, green: PAINT.green } as const;
+
+/** Pattern buoys: three shapes a child can tell apart and name (ball, cone, barrel-can). */
+export function buoySvg(color: string, shape: 'round' | 'cone' | 'can'): string {
+  const body =
+    shape === 'round'
+      ? `<circle cx="60" cy="70" r="40" fill="${color}" ${S}/><path d="M24 70 H96" stroke="#fff" stroke-width="8"/>`
+      : shape === 'cone'
+        ? `<path d="M60 22 L100 104 H20Z" fill="${color}" ${S}/><path d="M38 80 H82" stroke="#fff" stroke-width="8"/>`
+        : `<rect x="26" y="34" width="68" height="70" rx="8" fill="${color}" ${S}/><path d="M26 66 H94" stroke="#fff" stroke-width="8"/>`;
+  return svg(120, 130, `
+    ${body}
+    <path d="M8 116 C24 106 38 124 60 114 C82 104 96 124 112 114" fill="none" stroke="#bde0fe" stroke-width="6" stroke-linecap="round"/>`);
+}

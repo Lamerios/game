@@ -94,6 +94,20 @@ export class GameState {
     await this.save();
   }
 
+  /** Records the action stage on the way (its own skill), which runs on top of the island's tasks. */
+  async completeSea(skill: SkillId, level: number, outcome: Outcome, itemId: string, hintsUsed: number, durationMs: number, now = Date.now()) {
+    const session = this.profile.currentSession;
+    if (!session) return;
+    const st = this.profile.skills[skill];
+    this.profile = {
+      ...this.profile,
+      skills: { ...this.profile.skills, [skill]: recordOutcome(st, outcome, now, this.profile.calibrating).state },
+      currentSession: { ...session, seaDone: true },
+    };
+    await this.storage.logAttempt({ ts: now, skill, level, itemId, outcome, hintsUsed, durationMs });
+    await this.save();
+  }
+
   /** A task outside the island's list (the chest lock): only the skill's record is updated. */
   async recordExtra(skill: SkillId, level: number, outcome: Outcome, itemId: string, hintsUsed: number, durationMs: number, now = Date.now()) {
     const st = this.profile.skills[skill];

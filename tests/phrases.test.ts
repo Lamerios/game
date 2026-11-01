@@ -26,8 +26,8 @@ describe('phrases', () => {
   });
 
   it('falls back to the browser voice for numbers it has no clip for', () => {
-    expect(numberSeg(55).voiced).toBe(false);
-    expect(numberSeg(25, 'gen').voiced).toBe(false);
+    expect(numberSeg(155).voiced).toBe(false);
+    expect(numberSeg(125, 'gen').voiced).toBe(false);
   });
 
   it('stresses free text from the dictionary', () => {
