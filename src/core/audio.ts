@@ -22,6 +22,9 @@ export class Voice {
   private playing: AudioBufferSourceNode[] = [];
   /** Bumped on every say/stop so a slow load can't talk over a newer line. */
   private token = 0;
+  /** Settles when the current line has been spoken to the end, or was cut off. */
+  private ended: Promise<void> = Promise.resolve();
+  private endLine?: () => void;
 
   constructor(private readonly base = import.meta.env.BASE_URL) {}
 
@@ -60,13 +63,26 @@ export class Voice {
     this.stop();
     if (!this.enabled) return;
     const token = this.token;
+    this.ended = new Promise((resolve) => (this.endLine = resolve));
+    const done = () => {
+      if (token === this.token) this.endLine?.();
+    };
     if (!this.ctx || !this.hasClips(utt)) {
-      this.speakWeb(utt);
+      this.speakWeb(utt, done);
       return;
     }
-    this.playClips(this.voicedSegs(utt), token).catch(() => {
-      if (token === this.token) this.speakWeb(utt);
+    this.playClips(this.voicedSegs(utt), token, done).catch(() => {
+      if (token === this.token) this.speakWeb(utt, done);
     });
+  }
+
+  /**
+   * Resolves once the current line is over (spoken to the end or stopped), so a
+   * scene can wait for it before moving on. Never waits longer than `maxMs`:
+   * some browsers never report the end of a speechSynthesis line.
+   */
+  idle(maxMs = 10000): Promise<void> {
+    return Promise.race([this.ended, new Promise<void>((r) => setTimeout(r, maxMs))]);
   }
 
   stop(): void {
@@ -80,6 +96,8 @@ export class Voice {
     }
     this.playing = [];
     if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
+    this.endLine?.();
+    this.endLine = undefined;
   }
 
   private voicedSegs(u: Utterance): Seg[] {
@@ -103,10 +121,11 @@ export class Voice {
     return p;
   }
 
-  private async playClips(segs: Seg[], token: number) {
+  private async playClips(segs: Seg[], token: number, done: () => void) {
     const ctx = this.ctx!;
     const bufs = await Promise.all(segs.map((s) => this.load(s.id)));
     if (token !== this.token) return;
+    if (bufs.length === 0) return done();
     let t = ctx.currentTime + 0.02;
     this.playing = bufs.map((b) => {
       const src = ctx.createBufferSource();
@@ -116,10 +135,11 @@ export class Voice {
       t += b.duration + GAP;
       return src;
     });
+    this.playing.at(-1)!.onended = done;
   }
 
-  private speakWeb(u: Utterance) {
-    if (typeof speechSynthesis === 'undefined') return;
+  private speakWeb(u: Utterance, done: () => void) {
+    if (typeof speechSynthesis === 'undefined') return done();
     speechSynthesis.cancel();
     const msg = new SpeechSynthesisUtterance(webText(u));
     msg.lang = 'ru-RU';
@@ -129,6 +149,8 @@ export class Voice {
     if (sp) msg.pitch = sp.pitch;
     const ru = speechSynthesis.getVoices().find((v) => v.lang.startsWith('ru'));
     if (ru) msg.voice = ru;
+    msg.onend = done;
+    msg.onerror = done;
     speechSynthesis.speak(msg);
   }
 }

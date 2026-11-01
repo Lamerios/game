@@ -1,5 +1,6 @@
 import { Chess, type Square } from 'chess.js';
 import Phaser from 'phaser';
+import { phrase, type PhraseId } from '../../core/phrases';
 import { FONT, H, W } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
 import { MiniGameScene } from '../common/MiniGameScene';
@@ -25,7 +26,7 @@ export class ChessScene extends MiniGameScene {
   }
 
   protected instruction() {
-    return this.puzzle.goal;
+    return phrase(this.puzzle.goal);
   }
 
   create() {
@@ -38,7 +39,7 @@ export class ChessScene extends MiniGameScene {
     this.add.rectangle(BX + 8 * CELL + 30, 40, W - (BX + 8 * CELL + 50), H - 80, 0x264653, 0.85).setOrigin(0).setStrokeStyle(4, 0xffd166);
     this.add.image(BX + 8 * CELL + 120, 200, 'char-general').setDisplaySize(150, 150);
     this.add.text(BX + 8 * CELL + 50, 80, 'Форт Ладья', { fontFamily: FONT, fontSize: '44px', color: '#ffffff' });
-    this.add.text(BX + 8 * CELL + 50, 330, this.puzzle.goal, { fontFamily: FONT, fontSize: '32px', color: '#e9c46a', wordWrap: { width: W - (BX + 8 * CELL + 90) } });
+    this.add.text(BX + 8 * CELL + 50, 330, this.instruction().show, { fontFamily: FONT, fontSize: '32px', color: '#e9c46a', wordWrap: { width: W - (BX + 8 * CELL + 90) } });
     this.add.text(BX + 8 * CELL + 50, H - 120, 'Ты играешь белыми', { fontFamily: FONT, fontSize: '26px', color: '#ffffff' });
     this.layer = this.add.container(0, 0);
     this.draw();
@@ -90,18 +91,34 @@ export class ChessScene extends MiniGameScene {
     if (!this.selected) return;
     const from = this.selected;
     if (!this.legalTargets(from).includes(s)) {
-      this.say('Так эта фигура не ходит.');
+      this.say(phrase('chess.illegal'));
       return;
     }
     const mv = `${from}-${s}`;
     this.selected = undefined;
+    // Only a move from the list of solutions finishes the task, also after the
+    // solution was shown: then the child repeats it on the board themselves.
     if (this.puzzle.correct.includes(mv)) {
+      this.locked = true;
       this.board.move({ from, to: s, promotion: 'q' });
       this.draw([from, s]);
+      if (this.attempt.solutionShown) this.say(phrase('chess.followed'));
       void this.finish();
       return;
     }
+    if (this.attempt.solutionShown) {
+      this.say(phrase('chess.follow'));
+      this.showMove();
+      return;
+    }
     this.showConsequence(from, s);
+  }
+
+  /** Highlights the solution's piece and its target square; the child makes the move. */
+  private showMove() {
+    const [from, to] = this.puzzle.correct[0]!.split('-') as [Square, Square];
+    this.selected = from;
+    this.draw([from, to], [to]);
   }
 
   /** Wrong but legal move: play it, show black's reply, then take it back (SDD 3.4). */
@@ -115,11 +132,13 @@ export class ChessScene extends MiniGameScene {
       if (reply) {
         this.board.move(reply);
         this.draw([reply.from, reply.to]);
-        this.say('Вот что случится: чёрные ответят так.');
+        this.say(phrase('chess.reply'));
       } else {
-        this.say('Ход возможен, но задача не решена.');
+        this.say(phrase('chess.unsolved'));
       }
-      this.time.delayedCall(1600, () => {
+      // Let the line finish, so the hint that follows doesn't cut it off.
+      void this.afterSpeech(1600).then(() => {
+        if (!this.sys.isActive()) return;
         this.board = new Chess(before);
         this.draw();
         this.locked = false;
@@ -133,24 +152,26 @@ export class ChessScene extends MiniGameScene {
     if (step === 1) {
       this.say(this.instruction());
     } else if (step === 2) {
-      const tips: Record<number, string> = {
-        1: 'Найди чёрную фигуру, которую никто не защищает.',
-        2: 'Куда фигура может уйти, чтобы её не достали?',
-        3: 'Шах — это нападение на короля. Какая фигура может напасть?',
-        4: 'Королю некуда бежать? Закрой последние клетки.',
-        5: 'Конь прыгает буквой Г. Найди клетку, откуда он бьёт и короля, и ладью или ферзя.',
-      };
-      this.say(tips[this.puzzle.level] ?? this.instruction());
+      this.say(phrase(`chess.tip.${this.puzzle.level}` as PhraseId));
     } else if (step === 3) {
-      this.say('Подсказка: ходи этой фигурой.');
+      this.say(phrase('chess.hint.piece'));
       this.selected = from;
       this.draw([from], this.legalTargets(from));
     } else {
+      // Show the move, take it back, and let the child make it: the task is
+      // never counted as solved by a move the child didn't make.
       this.locked = true;
-      this.say('Смотри, вот решение.');
+      this.selected = undefined;
+      const before = this.board.fen();
+      this.say(phrase('chess.solution'));
       this.board.move({ from, to, promotion: 'q' });
       this.draw([from, to]);
-      this.time.delayedCall(2200, () => void this.finish());
+      this.time.delayedCall(1800, () => {
+        if (!this.sys.isActive()) return;
+        this.board = new Chess(before);
+        this.showMove();
+        this.locked = false;
+      });
     }
   }
 }

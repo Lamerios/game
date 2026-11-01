@@ -25,11 +25,31 @@ describe('generateChess', () => {
           if (level === 3) expect(after.inCheck()).toBe(true);
           if (level === 4) expect(after.isCheckmate()).toBe(true);
           if (level === 5) expect(m.piece).toBe('n');
-          // The moved piece cannot be taken back.
-          expect(after.moves({ verbose: true }).some((r) => r.to === m.to && r.captured)).toBe(level === 4 ? false : false);
+          // Black cannot take anything back, anywhere on the board.
+          expect(after.moves({ verbose: true }).some((r) => r.captured)).toBe(false);
+          if (level === 1) expect(m.piece).not.toBe('k');
         }
       }
       expect(Date.now() - t0).toBeLessThan(15000);
     });
   }
+
+  it('the list of solutions is complete: every other move fails the goal', () => {
+    for (const level of [1, 2, 3, 4]) {
+      for (let seed = 1; seed <= 40; seed++) {
+        const t = generateChess(level, mulberry32(seed * 31 + level));
+        for (const m of new Chess(t.fen).moves({ verbose: true })) {
+          const after = new Chess(t.fen);
+          after.move(m);
+          const loses = after.moves({ verbose: true }).some((r) => r.captured);
+          const good =
+            level === 1 ? !!m.captured && !loses :
+            level === 2 ? m.from === t.focus && !loses :
+            level === 3 ? after.inCheck() && !after.isCheckmate() && !loses :
+            after.isCheckmate();
+          expect(t.correct.includes(`${m.from}-${m.to}`), `L${level} ${t.fen} ${m.san}`).toBe(good);
+        }
+      }
+    }
+  }, 30000);
 });

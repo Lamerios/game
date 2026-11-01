@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { join, phrase, type PhraseId } from '../../core/phrases';
 import { button, COLORS, FONT, H } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
 import { MiniGameScene } from '../common/MiniGameScene';
@@ -9,7 +10,6 @@ const CELL = 60;
 const GX = 40;
 const GY = 120;
 const ARROW: Record<Cmd, string> = { F: '↑', L: '↶', R: '↷' };
-const SAY: Record<Cmd, string> = { F: 'вперёд', L: 'налево', R: 'направо' };
 const MAX_BLOCKS_UI = 8;
 
 /**
@@ -37,10 +37,11 @@ export class CourseScene extends MiniGameScene {
   }
 
   protected instruction() {
-    if (this.debug) return 'Клякса испортил маршрут: одна стрелка неверная. Нажми на неё, чтобы поменять, и жми «В путь!».';
-    const extra = this.map.coins.length ? ' Собери все монеты по пути.' : '';
-    const limit = this.map.maxBlocks ? ` Можно не больше ${this.map.maxBlocks} стрелок — используй повтор.` : '';
-    return `Проложи курс до буя. Собери стрелки и нажми «В путь!».${extra}${limit}`;
+    if (this.debug) return phrase('course.debug');
+    const parts = [phrase('course.go')];
+    if (this.map.coins.length) parts.push(phrase('course.coins'));
+    if (this.map.maxBlocks) parts.push(phrase('course.limit', { n: this.map.maxBlocks }));
+    return join(...parts);
   }
 
   create() {
@@ -157,13 +158,13 @@ export class CourseScene extends MiniGameScene {
     }
     if (res.reason === 'crash') {
       this.cameras.main.shake(200, 0.006);
-      this.say('Риф! Яхта остановилась. Посмотри на красную стрелку.');
+      this.say(phrase('course.crash'));
     } else if (res.reason === 'too_long') {
-      this.say(`Слишком много стрелок. Можно ${this.map.maxBlocks}. Нажми на стрелку, чтобы повторить её.`);
+      this.say(phrase('course.toolong', { n: this.map.maxBlocks ?? 0 }));
     } else if (res.reason === 'coins_left') {
-      this.say('Не все монеты собраны.');
+      this.say(phrase('course.coinsleft'));
     } else {
-      this.say(this.debug ? 'Яхта не дошла до буя. Какая стрелка ведёт не туда?' : 'Яхта не дошла до буя. Что добавить?');
+      this.say(phrase(this.debug ? 'course.short.debug' : 'course.short'));
     }
     this.renderStrip(-1, res.ok ? -1 : res.block);
     this.time.delayedCall(1200, () => {
@@ -196,20 +197,21 @@ export class CourseScene extends MiniGameScene {
     if (step === 1) {
       this.say(this.instruction());
     } else if (step === 2) {
-      const dirName = ['вверх', 'вправо', 'вниз', 'влево'][this.map.start.dir];
-      this.say(`Яхта смотрит ${dirName}. Повернись к бую и плыви вперёд.`);
+      this.say(phrase(`course.dir.${this.map.start.dir}` as PhraseId));
     } else if (step === 3 && this.debug) {
       const bad = this.program.findIndex((b, i) => b.cmd !== sol[i]?.cmd);
-      this.say('Посмотри на мигающую стрелку.');
+      this.say(phrase('course.blink'));
       this.renderStrip(-1, bad);
     } else if (step === 3) {
       const b = sol[0]!;
-      this.say(`Первая стрелка: ${SAY[b.cmd]}${b.times > 1 ? `, повторить ${b.times} раза` : ''}.`);
+      const first = phrase(`course.first.${b.cmd}` as PhraseId);
+      const times = b.times % 10 >= 2 && b.times % 10 <= 4 && (b.times < 12 || b.times > 14) ? 'course.repeat.few' : 'course.repeat.many';
+      this.say(b.times > 1 ? join(first, phrase(times, { n: b.times })) : first);
       this.program = [{ ...b }];
       this.renderStrip();
     } else {
       this.locked = true;
-      this.say('Смотри, вот курс до буя.');
+      this.say(phrase('course.solution'));
       this.program = sol.map((b) => ({ ...b }));
       this.renderStrip();
       const res = run(this.map, this.program);

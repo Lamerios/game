@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { free } from '../../core/phrases';
+import { phrase } from '../../core/phrases';
 import { FONT, H, W } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
 import { MiniGameScene } from '../common/MiniGameScene';
@@ -28,8 +28,8 @@ export class PuzzleScene extends MiniGameScene {
   }
 
   protected instruction() {
-    if (this.puzzle.skill === 'math') return free(this.puzzle.text);
-    return 'Прочитай записку сам и выбери ответ.';
+    if (this.puzzle.skill === 'math') return this.puzzle.say;
+    return phrase('puzzle.readyourself');
   }
 
   create() {
@@ -181,15 +181,14 @@ export class PuzzleScene extends MiniGameScene {
           .text(60, this.paperBottom + 8, 'Прочитай мне', { fontFamily: FONT, fontSize: '28px', color: '#0b2233', backgroundColor: '#ffffff', padding: { x: 12, y: 6 } })
           .setDepth(5)
           .setInteractive({ useHandCursor: true })
-          .on('pointerup', () => this.say(free(p.text)));
+          .on('pointerup', () => this.say(p.say));
       }
       if (step === 3) this.tweens.add({ targets: this.optionViews[p.answer]!, alpha: 0.4, yoyo: true, repeat: 3, duration: 250 });
       return;
     }
     this.locked = true;
     this.mark(p.answer);
-    const a = p.options[p.answer]!;
-    this.say(a.label ? `Ответ: ${a.label}.` : 'Вот правильный ответ.');
+    this.say(p.answerSay);
     this.time.delayedCall(1800, () => void this.finish());
   }
 }
