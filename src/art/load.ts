@@ -2,7 +2,7 @@ import type Phaser from 'phaser';
 import { CHARACTERS, strelkaSvg } from './characters';
 import { pieceSvg } from './chess';
 import {
-  BEACH_BG, BLOT_SHIP, BOTTLE, COIN, COLORED_KINDS, CRATE, GOAL_BUOY, HARBOR_BG, islandSvg, NIGHT_BG,
+  BEACH_BG, BLOT_SHIP, BOTTLE, BUOY_PAINT, buoySvg, COIN, GULL, COLORED_KINDS, CRATE, GOAL_BUOY, HARBOR_BG, islandSvg, NIGHT_BG,
   OBJECT_COLORS, OBJECTS, REEF, SEA_BG, YACHT_SIDE, YACHT_TOP,
 } from './objects';
 
@@ -23,7 +23,11 @@ export function artSources(): Record<string, string> {
     'bg-sea': SEA_BG,
     'bg-beach': BEACH_BG,
     'bg-night': NIGHT_BG,
+    gull: GULL,
   };
+  for (const [name, hex] of Object.entries(BUOY_PAINT)) {
+    for (const shape of ['round', 'cone', 'can'] as const) out[`buoy-${name}-${shape}`] = buoySvg(hex, shape);
+  }
   for (const [kind, draw] of Object.entries(OBJECTS)) {
     if ((COLORED_KINDS as readonly string[]).includes(kind)) {
       for (const [name, hex] of Object.entries(OBJECT_COLORS)) out[`obj-${kind}-${name}`] = draw(hex);
