@@ -2,6 +2,7 @@ name: Voice-over (SpeechKit)
 # Runs on push when phrases change (any branch), or by hand: Actions → "Voice-over (SpeechKit)" → Run workflow.
 # Needs the repository secret YANDEX_SPEECHKIT_API_KEY (Settings → Secrets and variables → Actions).
 # Synthesises only new or changed clips, then commits public/audio to the same branch.
+# English words (Snake game) are made by Kokoro, an open neural TTS: no key needed, set up only when there is work for it.
 on:
   push:
     paths:
@@ -9,7 +10,9 @@ on:
       - src/core/phrases.ts
       - src/games/note/vocab.ts
       - src/games/note/generator.ts
+      - src/games/snake/logic.ts
       - tools/tts.ts
+      - tools/kokoro_tts.py
       - .github/workflows/tts.yml
   workflow_dispatch:
     inputs:
@@ -34,12 +37,30 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      - name: What needs voicing
+        id: needs
+        run: npx tsx tools/tts.ts --needs | tee -a "$GITHUB_OUTPUT"
+        env:
+          TTS_VOICE: ${{ inputs.voice || 'alena' }}
+          TTS_EMOTION: ${{ github.event_name == 'workflow_dispatch' && inputs.emotion || 'good' }}
+          TTS_SPEED: ${{ inputs.speed || '0.9' }}
       - name: Check key
         id: key
         run: |
-          if [ -n "$KEY" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::warning::Secret YANDEX_SPEECHKIT_API_KEY is not set, skipping voice-over."; fi
+          if [ -n "$KEY" ]; then echo "ok=true" >> "$GITHUB_OUTPUT";
+          elif [ "${{ steps.needs.outputs.speechkit }}" = "0" ]; then echo "ok=true" >> "$GITHUB_OUTPUT";
+          else echo "::warning::Secret YANDEX_SPEECHKIT_API_KEY is not set, skipping voice-over."; fi
         env:
           KEY: ${{ secrets.YANDEX_SPEECHKIT_API_KEY }}
+      - uses: actions/setup-python@v5
+        if: steps.key.outputs.ok == 'true' && steps.needs.outputs.kokoro != '0'
+        with: { python-version: '3.12' }
+      - name: Install Kokoro
+        if: steps.key.outputs.ok == 'true' && steps.needs.outputs.kokoro != '0'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q espeak-ng ffmpeg
+          pip install -q torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "kokoro>=0.9.4" soundfile
       - run: npm run tts
         if: steps.key.outputs.ok == 'true'
         env:

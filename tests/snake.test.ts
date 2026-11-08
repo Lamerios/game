@@ -4,14 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { allClips, english, ENGLISH, webText } from '../src/core/phrases';
 import { mulberry32 } from '../src/games/common/rng';
 import {
-  distractors, itemsForRound, moveSnake, pickWords, placeItems, stepHead, WORDS,
+  distractors, itemsForRound, moveSnake, NUMBERS, numberOf, pickWords, placeItems, planGame, stepHead, WORDS,
 } from '../src/games/snake/logic';
 
 describe('snake', () => {
   it('every word has a picture and an English clip', () => {
     const clips = allClips([]);
     for (const w of WORDS) {
-      expect(existsSync(join(__dirname, '..', 'public', 'snake', `${w.id}.webp`)), w.id).toBe(true);
+      if (w.cat !== 'number') expect(existsSync(join(__dirname, '..', 'public', 'snake', `${w.id}.webp`)), w.id).toBe(true);
       expect(clips.get(`en.${w.id}`), w.id).toBe(ENGLISH[w.id]);
     }
     expect(Object.keys(ENGLISH).sort()).toEqual(WORDS.map((w) => w.id).sort());
@@ -58,5 +58,31 @@ describe('snake', () => {
       expect(d).toHaveLength(k);
       expect(new Set([words[round], ...d]).size).toBe(k + 1);
     }
+  });
+
+  it('numbers: 0–20 and the tens, in English and Russian', () => {
+    expect(NUMBERS.map((w) => numberOf(w.id))).toEqual([...Array.from({ length: 21 }, (_, i) => i), 30, 40, 50, 60, 70, 80, 90, 100]);
+    expect(ENGLISH.n13).toBe('thirteen');
+    expect(ENGLISH.n100).toBe('one hundred');
+    expect(NUMBERS.find((w) => w.id === 'n7')!.ru).toBe('семь');
+  });
+
+  it('plans a game of the chosen kind, and numbers only meet numbers', () => {
+    const rng = mulberry32(5);
+    for (let g = 0; g < 50; g++) {
+      const nums = planGame('numbers', {}, 10, rng);
+      expect(nums.every((id) => numberOf(id) !== undefined)).toBe(true);
+      expect(planGame('words', {}, 10, rng).every((id) => numberOf(id) === undefined)).toBe(true);
+      const mix = planGame('mix', {}, 10, rng);
+      expect(new Set(mix).size).toBe(10);
+      expect(mix.filter((id) => numberOf(id) !== undefined)).toHaveLength(4);
+      for (const id of [...nums, ...mix]) {
+        const d = distractors(id, 3, 8, rng);
+        expect(d.every((x) => (numberOf(x) !== undefined) === (numberOf(id) !== undefined))).toBe(true);
+      }
+    }
+    // Later rounds put the sound-alike next to it.
+    expect(distractors('n13', 3, 6, rng)).toContain('n30');
+    expect(distractors('n6', 3, 6, rng)).toContain('n16');
   });
 });

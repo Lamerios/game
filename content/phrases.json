@@ -202,7 +202,8 @@
     "snake.yes.3": "Да! Ты усл+ышал!",
     "snake.yes.4": "Ур+а, угад+ал!",
     "snake.no": "+Это друг+ое сл+ово. Сл+ушай ещё раз:",
-    "snake.win": "{name}, ты накорм+ил Ш+ушу! Ты узн+ал д+есять англ+ийских слов."
+    "snake.win": "{name}, ты накорм+ил Ш+ушу! Ты узн+ал д+есять англ+ийских слов.",
+    "snake.choose": "Во что игр+аем: сл+ова +или ч+исла?"
   },
   "numbers": {
     "nom": [
@@ -552,12 +553,13 @@
     }
   },
   "english": {
-    "$comment": "English words for the Snake game: id → what SpeechKit says (en-US voice below). Clips are en.<id>.",
+    "$comment": "English words for the Snake game: id → text on screen and for TTS (n7 = number 7). Clips en.<id> are made by Kokoro (tools/kokoro_tts.py), a neural en-US voice, not SpeechKit.",
     "voice": {
-      "voice": "john",
+      "engine": "kokoro",
+      "voice": "af_heart",
       "lang": "en-US",
       "emotion": "",
-      "speed": "0.8"
+      "speed": "0.85"
     },
     "words": {
       "apple": "apple",
@@ -600,7 +602,36 @@
       "flower": "flower",
       "boat": "boat",
       "cake": "cake",
-      "egg": "egg"
+      "egg": "egg",
+      "n0": "zero",
+      "n1": "one",
+      "n2": "two",
+      "n3": "three",
+      "n4": "four",
+      "n5": "five",
+      "n6": "six",
+      "n7": "seven",
+      "n8": "eight",
+      "n9": "nine",
+      "n10": "ten",
+      "n11": "eleven",
+      "n12": "twelve",
+      "n13": "thirteen",
+      "n14": "fourteen",
+      "n15": "fifteen",
+      "n16": "sixteen",
+      "n17": "seventeen",
+      "n18": "eighteen",
+      "n19": "nineteen",
+      "n20": "twenty",
+      "n30": "thirty",
+      "n40": "forty",
+      "n50": "fifty",
+      "n60": "sixty",
+      "n70": "seventy",
+      "n80": "eighty",
+      "n90": "ninety",
+      "n100": "one hundred"
     }
   }
 }
