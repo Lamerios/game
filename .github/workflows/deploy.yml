@@ -2,6 +2,12 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # The voice-over workflow commits new clips with GITHUB_TOKEN, and such pushes start no
+  # workflows: redeploy when it finishes on main, so new clips reach the site.
+  workflow_run:
+    workflows: ['Voice-over (SpeechKit)']
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
