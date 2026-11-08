@@ -101,6 +101,9 @@ export class HarborScene extends Phaser.Scene {
         .text(980, 330, msg, { fontFamily: FONT, fontSize: '40px', color: '#ffffff', backgroundColor: '#1b4965', padding: { x: 16, y: 10 } })
         .setOrigin(0.5);
     }
+    // The English snake is a separate game, outside the voyage and its session limits.
+    const snake = button(this, 980, 200, '      Змейка', () => this.scene.start('Snake'), { w: 380, h: 90, color: 0x40916c });
+    snake.add(this.add.text(-112, 0, 'ABC', { fontFamily: FONT, fontSize: '30px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5));
     this.add
       .text(W - 20, H - 20, 'Для родителей', { fontFamily: FONT, fontSize: '24px', color: '#ffffff', backgroundColor: '#0b2233', padding: { x: 12, y: 8 } })
       .setOrigin(1)
