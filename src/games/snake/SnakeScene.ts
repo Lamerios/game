@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { voice } from '../../core/audio';
-import { english, phrase, type PhraseId, type Utterance } from '../../core/phrases';
+import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
 import { button, COLORS, FONT, H, W } from '../../scenes/ui';
 import { mulberry32, type Rng } from '../common/rng';
 import {
-  DIRS, distractors, itemsForRound, moveSnake, OPPOSITE, pickWords, placeItems, WORDS, wordById, type Cell, type Dir,
+  DIRS, distractors, itemsForRound, moveSnake, numberOf, OPPOSITE, placeItems, planGame, WORDS, wordById, type Cell, type Dir, type Mode,
 } from './logic';
 
 const CELL = 60;
@@ -18,6 +18,24 @@ const ITEM_SIZE = 86;
 const STATS_KEY = 'snake-words';
 const INTRO_KEY = 'snake-intro';
 const YES_COUNT = 5;
+
+const NUMBER_PAINT = ['#e63946', '#f77f00', '#2a9d8f', '#277da1', '#7b2cbf', '#43aa8b', '#d62828', '#3a86ff'];
+
+/** A number card: a bright rounded tile with the digits, drawn instead of a picture. */
+function numberSvg(n: number): string {
+  const text = String(n);
+  const size = text.length === 1 ? 150 : text.length === 2 ? 118 : 86;
+  const fill = NUMBER_PAINT[n % NUMBER_PAINT.length];
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+    <rect x="10" y="14" width="172" height="172" rx="34" fill="#00000033"/>
+    <rect x="10" y="6" width="172" height="172" rx="34" fill="${fill}" stroke="#2b2d42" stroke-width="6"/>
+    <path d="M30 40 C40 22 70 18 96 18" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="10" stroke-linecap="round"/>
+    <text x="96" y="${92 + size * 0.36}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900"
+      font-size="${size}" fill="#ffffff" stroke="#2b2d42" stroke-width="7" paint-order="stroke">${text}</text></svg>`;
+}
+
+/** English as shown on screen ("seven", "apple"). */
+const en = (id: string) => ENGLISH[id] ?? id;
 
 const px = (c: Cell) => ({ x: X0 + c.x * CELL + CELL / 2, y: Y0 + c.y * CELL + CELL / 2 });
 
@@ -61,6 +79,7 @@ export class SnakeScene extends Phaser.Scene {
   private grow = 0;
   private items: Item[] = [];
   private words: string[] = [];
+  private mode?: Mode;
   private round = 0;
   private target = '';
   private firstTry = true;
@@ -80,16 +99,22 @@ export class SnakeScene extends Phaser.Scene {
     super('Snake');
   }
 
+  init(data: { mode?: Mode }) {
+    this.mode = data?.mode;
+  }
+
   preload() {
     for (const w of WORDS) {
-      if (!this.textures.exists(`snake-${w.id}`)) this.load.image(`snake-${w.id}`, `${import.meta.env.BASE_URL}snake/${w.id}.webp`);
+      if (this.textures.exists(`snake-${w.id}`)) continue;
+      const n = numberOf(w.id);
+      if (n === undefined) this.load.image(`snake-${w.id}`, `${import.meta.env.BASE_URL}snake/${w.id}.webp`);
+      else this.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(numberSvg(n))}`);
     }
   }
 
   create() {
     this.rng = mulberry32(Date.now() & 0xffffffff);
     this.stats = readStore<Record<string, number>>(STATS_KEY, {});
-    this.words = pickWords(this.stats, ROUNDS, this.rng);
     this.body = [{ x: 4, y: 5 }, { x: 3, y: 5 }, { x: 2, y: 5 }];
     this.prev = this.body.map((c) => ({ ...c }));
     this.dir = 'right';
@@ -116,6 +141,36 @@ export class SnakeScene extends Phaser.Scene {
       voice.stop();
     });
     this.render(1);
+    if (this.mode) this.begin(this.mode);
+    else this.chooseMode();
+  }
+
+  /** Words, numbers, or both: big buttons over the board. */
+  private chooseMode() {
+    const layer: Phaser.GameObjects.GameObject[] = [
+      this.add.rectangle(X0 + (COLS * CELL) / 2, Y0 + (ROWS * CELL) / 2, COLS * CELL, ROWS * CELL, 0x1b4332, 0.35).setInteractive(),
+    ];
+    const cx = X0 + (COLS * CELL) / 2;
+    const options: [Mode, string, string[]][] = [
+      ['words', 'Слова', ['snake-apple', 'snake-cat']],
+      ['numbers', 'Числа', ['snake-n3', 'snake-n15']],
+      ['mix', 'Всё вместе', ['snake-banana', 'snake-n7']],
+    ];
+    options.forEach(([mode, label, icons], i) => {
+      const b = button(this, cx, 220 + i * 150, `          ${label}`, () => {
+        layer.forEach((o) => o.destroy());
+        this.begin(mode);
+      }, { w: 520, h: 120, color: [0x40916c, 0x277da1, 0x8d5524][i] });
+      icons.forEach((key, j) => b.add(this.add.image(-200 + j * 70, 0, key).setDisplaySize(80, 80)));
+      layer.push(b);
+    });
+    layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(15));
+    void this.talk(phrase('snake.choose'));
+  }
+
+  private begin(mode: Mode) {
+    this.mode = mode;
+    this.words = planGame(mode, this.stats, ROUNDS, this.rng);
     void this.startRound();
   }
 
@@ -183,8 +238,10 @@ export class SnakeScene extends Phaser.Scene {
     }
     const w = wordById(id);
     this.card.add(this.add.image(-95, 0, `snake-${id}`).setDisplaySize(130, 130));
-    const en = this.add.text(70, -22, id, { fontFamily: FONT, fontSize: id.length > 7 ? '36px' : '48px', color: '#1b4332', fontStyle: 'bold' }).setOrigin(0.5);
-    this.card.add(en);
+    const word = en(id);
+    this.card.add(
+      this.add.text(70, -22, word, { fontFamily: FONT, fontSize: word.length > 9 ? '30px' : word.length > 7 ? '36px' : '48px', color: '#1b4332', fontStyle: 'bold' }).setOrigin(0.5),
+    );
     this.card.add(this.add.text(70, 36, w.ru, { fontFamily: FONT, fontSize: '28px', color: '#6c757d' }).setOrigin(0.5));
     this.tweens.add({ targets: this.card, scale: { from: 0.8, to: 1 }, duration: 300, ease: 'Back.easeOut' });
   }
@@ -356,7 +413,7 @@ export class SnakeScene extends Phaser.Scene {
 
   private floatWord(id: string, x: number, y: number, color: string) {
     const t = this.add
-      .text(x, y - 40, id, { fontFamily: FONT, fontSize: '40px', color, stroke: '#1b4332', strokeThickness: 8, fontStyle: 'bold' })
+      .text(x, y - 40, en(id), { fontFamily: FONT, fontSize: '40px', color, stroke: '#1b4332', strokeThickness: 8, fontStyle: 'bold' })
       .setOrigin(0.5)
       .setDepth(8);
     this.tweens.add({ targets: t, y: y - 110, alpha: 0, delay: 700, duration: 900, onComplete: () => t.destroy() });
@@ -387,9 +444,9 @@ export class SnakeScene extends Phaser.Scene {
         voice.say(english(id));
         this.tweens.add({ targets: img, scale: img.scale * 1.15, yoyo: true, duration: 150 });
       });
-      layer.push(img, this.add.text(x, y + 72, id, { fontFamily: FONT, fontSize: '30px', color: '#1b4332', fontStyle: 'bold' }).setOrigin(0.5));
+      layer.push(img, this.add.text(x, y + 72, en(id), { fontFamily: FONT, fontSize: '30px', color: '#1b4332', fontStyle: 'bold' }).setOrigin(0.5));
     });
-    layer.push(button(this, W / 2 - 170, 580, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: COLORS.leaf }));
+    layer.push(button(this, W / 2 - 170, 580, 'Ещё раз', () => this.scene.restart({ mode: this.mode }), { w: 300, h: 90, color: COLORS.leaf }));
     layer.push(button(this, W / 2 + 170, 580, 'Домой', () => this.scene.start('Harbor'), { w: 300, h: 90, color: 0x6c757d }));
     layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
     void this.talk(phrase('snake.win'));

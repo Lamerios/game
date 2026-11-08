@@ -12,13 +12,20 @@
  * voice settings, so unchanged clips are never re-synthesised (and never re-billed).
  *
  * Story lines ("rumb.…", "blot.…") use their speaker's voice from content/phrases.json
- * "speakers"; English words ("en.…", Snake game) use the en-US voice from "english";
- * everything else uses the default below.
+ * "speakers"; everything else uses the default below.
+ *
+ * English words ("en.…", Snake game) are not SpeechKit: its only English voice
+ * sounded wrong. They come from Kokoro, an open neural TTS (Apache-2.0), run by
+ * tools/kokoro_tts.py (Python 3.10–3.12: `pip install kokoro soundfile`, plus
+ * espeak-ng and ffmpeg). KOKORO_PYTHON picks the interpreter (default python3).
+ * `--needs` prints how many clips each engine has to make, for the workflow.
  * Voice settings: TTS_VOICE (default alena), TTS_EMOTION (default good, '' for none),
  * TTS_SPEED (default 0.9). The key is read from the environment only and never printed.
  */
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { allClips, ENGLISH_VOICE, SPEAKERS, speakerOf } from '../src/core/phrases';
@@ -48,6 +55,7 @@ interface Manifest {
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const samplesArg = args.indexOf('--samples');
+const needsOnly = args.includes('--needs');
 
 const settings: VoiceSettings = {
   voice: process.env.TTS_VOICE || 'alena',
@@ -113,7 +121,7 @@ async function main() {
   const next: Record<string, string> = {};
   const todo: [string, string][] = [];
   const settingsFor = (id: string): VoiceSettings => {
-    if (id.startsWith('en.')) return ENGLISH_VOICE;
+    if (id.startsWith('en.')) return { ...ENGLISH_VOICE, voice: `${ENGLISH_VOICE.engine}:${ENGLISH_VOICE.voice}` };
     const sp = speakerOf(id);
     if (!sp) return settings;
     const { voice, emotion, speed } = SPEAKERS[sp]!;
@@ -124,8 +132,15 @@ async function main() {
     next[id] = h;
     if (old.clips[id] !== h || !existsSync(join(OUT, `${id}.mp3`))) todo.push([id, text]);
   }
-  const chars = todo.reduce((s, [, t]) => s + t.length, 0);
-  console.log(`${clips.size} clips, ${todo.length} to synthesise (${chars} chars), voice ${settings.voice}.`);
+  const isEn = ([id]: [string, string]) => id.startsWith('en.');
+  const enTodo = todo.filter(isEn);
+  const skTodo = todo.filter((t) => !isEn(t));
+  if (needsOnly) {
+    console.log(`speechkit=${skTodo.length}\nkokoro=${enTodo.length}`);
+    return;
+  }
+  const chars = skTodo.reduce((s, [, t]) => s + t.length, 0);
+  console.log(`${clips.size} clips, ${skTodo.length} for SpeechKit (${chars} chars, voice ${settings.voice}), ${enTodo.length} for Kokoro.`);
   if (dryRun) {
     todo.slice(0, 20).forEach(([id, t]) => console.log(`  ${id}: ${t}`));
     if (todo.length > 20) console.log(`  … and ${todo.length - 20} more`);
@@ -133,7 +148,7 @@ async function main() {
   }
 
   mkdirSync(OUT, { recursive: true });
-  const key = todo.length ? apiKey() : '';
+  const key = skTodo.length ? apiKey() : '';
   // Keep the manifest in step with what is on disk, so an interrupted run resumes.
   const done: Record<string, string> = Object.fromEntries(
     Object.entries(old.clips).filter(([id]) => next[id] !== undefined && existsSync(join(OUT, `${id}.mp3`))),
@@ -143,12 +158,23 @@ async function main() {
     writeFileSync(MANIFEST, `${JSON.stringify({ voice: settings, clips: sorted }, null, 1)}\n`);
   };
   let n = 0;
-  await pool(todo, CONCURRENCY, async ([id, text]) => {
+  if (enTodo.length) {
+    const jobs = join(tmpdir(), `kokoro-${process.pid}.json`);
+    const { voice, speed } = ENGLISH_VOICE;
+    writeFileSync(jobs, JSON.stringify({ voice, speed: Number(speed), clips: enTodo.map(([id, text]) => ({ text, out: join(OUT, `${id}.mp3`) })) }));
+    const py = process.env.KOKORO_PYTHON || 'python3';
+    const r = spawnSync(py, [join(ROOT, 'tools', 'kokoro_tts.py'), jobs], { stdio: 'inherit' });
+    unlinkSync(jobs);
+    if (r.status !== 0) throw new Error(`Kokoro failed (${py} tools/kokoro_tts.py, exit ${r.status ?? r.error?.message}).`);
+    for (const [id] of enTodo) done[id] = next[id]!;
+    save();
+  }
+  await pool(skTodo, CONCURRENCY, async ([id, text]) => {
     writeFileSync(join(OUT, `${id}.mp3`), await synthesize(text, settingsFor(id), key));
     done[id] = next[id]!;
     if (++n % 25 === 0) {
       save();
-      console.log(`  ${n}/${todo.length}`);
+      console.log(`  ${n}/${skTodo.length}`);
     }
   });
   save();

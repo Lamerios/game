@@ -1,3 +1,5 @@
+import content from '../../../content/phrases.json';
+import { unstress } from '../../core/phrases';
 import { shuffle, type Rng } from '../common/rng';
 
 /**
@@ -15,15 +17,15 @@ export interface Cell {
 export const DIRS: Record<Dir, Cell> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
 export const OPPOSITE: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
 
-export type Category = 'fruit' | 'vegetable' | 'animal' | 'thing';
+export type Category = 'fruit' | 'vegetable' | 'animal' | 'thing' | 'number';
 export interface Word {
-  /** Also the picture (public/snake/<id>.webp) and the clip (en.<id>). */
+  /** Also the picture (public/snake/<id>.webp; numbers are drawn) and the clip (en.<id>). Numbers are n0…n100. */
   id: string;
   ru: string;
   cat: Category;
 }
 
-export const WORDS: readonly Word[] = [
+export const PICTURES: readonly Word[] = [
   { id: 'apple', ru: 'яблоко', cat: 'fruit' },
   { id: 'banana', ru: 'банан', cat: 'fruit' },
   { id: 'orange', ru: 'апельсин', cat: 'fruit' },
@@ -66,6 +68,16 @@ export const WORDS: readonly Word[] = [
   { id: 'cake', ru: 'торт', cat: 'thing' },
   { id: 'egg', ru: 'яйцо', cat: 'thing' },
 ];
+
+/** English numbers: 0–20, then the tens up to 100. */
+export const NUMBER_VALUES: readonly number[] = [...Array.from({ length: 21 }, (_, i) => i), 30, 40, 50, 60, 70, 80, 90, 100];
+export const numberId = (n: number) => `n${n}`;
+export const numberOf = (id: string) => (/^n\d+$/.test(id) ? Number(id.slice(1)) : undefined);
+export const NUMBERS: readonly Word[] = NUMBER_VALUES.map((n) => ({ id: numberId(n), ru: unstress(content.numbers.nom[n]!), cat: 'number' }));
+
+export const WORDS: readonly Word[] = [...PICTURES, ...NUMBERS];
+
+export type Mode = 'words' | 'numbers' | 'mix';
 
 export const wordById = (id: string) => WORDS.find((w) => w.id === id)!;
 
@@ -117,20 +129,43 @@ export function placeItems(n: number, body: readonly Cell[], dir: Dir, cols: num
  * words keep coming and the tricky ones come back. `stats` = id → times eaten
  * right on the first try.
  */
-export function pickWords(stats: Record<string, number>, n: number, rng: Rng): string[] {
-  return shuffle(rng, WORDS)
+export function pickWords(stats: Record<string, number>, n: number, rng: Rng, pool: readonly Word[] = PICTURES): string[] {
+  return shuffle(rng, pool)
     .map((w) => ({ id: w.id, score: (stats[w.id] ?? 0) + rng() * 1.5 }))
     .sort((a, b) => a.score - b.score)
     .slice(0, n)
     .map((w) => w.id);
 }
 
-/** Other pictures to choose from; in later rounds one is from the same group (fruit among fruit). */
+/** The ten words of one game: pictures, numbers, or six pictures and four numbers mixed. */
+export function planGame(mode: Mode, stats: Record<string, number>, rounds: number, rng: Rng): string[] {
+  if (mode === 'words') return pickWords(stats, rounds, rng, PICTURES);
+  if (mode === 'numbers') return pickWords(stats, rounds, rng, NUMBERS);
+  const nums = Math.round(rounds * 0.4);
+  return shuffle(rng, [...pickWords(stats, rounds - nums, rng, PICTURES), ...pickWords(stats, nums, rng, NUMBERS)]);
+}
+
+/** The number most easily mixed up with n when heard: thirteen/thirty, six/sixteen. */
+export function soundsLike(n: number): number | undefined {
+  if (n >= 13 && n <= 19) return (n - 10) * 10;
+  if (n >= 30 && n <= 90) return n / 10 + 10;
+  if (n >= 1 && n <= 9) return n + 10;
+  return undefined;
+}
+
+/**
+ * Other things to choose from, of the same kind as the target (numbers among
+ * numbers). Later on one is close: fruit among fruit, thirty next to thirteen.
+ */
 export function distractors(target: string, k: number, round: number, rng: Rng): string[] {
   const t = wordById(target);
-  const others = shuffle(rng, WORDS.filter((w) => w.id !== target));
+  const isNum = t.cat === 'number';
+  const others = shuffle(rng, WORDS.filter((w) => w.id !== target && (w.cat === 'number') === isNum));
   const out: string[] = [];
-  if (round >= 5) {
+  if (round >= 4 && isNum) {
+    const twin = soundsLike(numberOf(target)!);
+    if (twin !== undefined) out.push(numberId(twin));
+  } else if (round >= 5) {
     const same = others.find((w) => w.cat === t.cat);
     if (same) out.push(same.id);
   }
