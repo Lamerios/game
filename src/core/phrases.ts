@@ -23,6 +23,8 @@ export interface Utterance {
   segs: Seg[];
   /** Who speaks (first part of the phrase id, e.g. "rumb"), for the bubble and the browser voice. */
   speaker?: string;
+  /** Language for the browser voice; Russian when absent. */
+  lang?: string;
 }
 
 export type PhraseId = keyof typeof content.phrases;
@@ -35,6 +37,9 @@ const STRESS: Record<string, string> = content.stress;
 const LETTER_NAMES: Record<string, string> = content.letters;
 /** Voice settings per speaker; a phrase id "rumb.…" is spoken by "rumb". */
 export const SPEAKERS: Record<string, { voice: string; emotion: string; speed: string; pitch: number }> = content.speakers;
+/** English words (Snake game): id → text for the en-US voice. Clips are `en.<id>`. */
+export const ENGLISH: Record<string, string> = content.english.words;
+export const ENGLISH_VOICE: { voice: string; lang: string; emotion: string; speed: string } = content.english.voice;
 /** The child's name the clips are generated with, with its stress mark. */
 export const CHILD = content.child;
 
@@ -155,6 +160,13 @@ export function join(...parts: Utterance[]): Utterance {
   };
 }
 
+/** An English word, spoken by the en-US voice (its own clip, never mixed with Russian). */
+export function english(id: string): Utterance {
+  const say = ENGLISH[id];
+  if (say === undefined) throw new Error(`Unknown English word ${id}`);
+  return { show: say, segs: [{ id: `en.${id}`, show: say, say, voiced: true }], lang: ENGLISH_VOICE.lang };
+}
+
 /** Any string, e.g. from a scene not moved to phrases.json yet: one clip keyed by its text. */
 export function free(text: string): Utterance {
   return { show: text, segs: [textSeg(text)] };
@@ -181,6 +193,7 @@ export function allClips(texts: Iterable<string>): Map<string, string> {
   for (const c of ['nom', 'gen'] as const) NUMBERS[c].forEach((_, n) => add(numberSeg(n, c)));
   NUMBERS.nom.forEach((_, n) => add(numberSeg(n, 'fem')));
   Object.keys(LETTER_NAMES).forEach((l) => add(letterSeg(l)));
+  Object.keys(ENGLISH).forEach((w) => english(w).segs.forEach(add));
   for (const t of texts) add(textSeg(t));
   return out;
 }

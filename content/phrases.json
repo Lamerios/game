@@ -192,7 +192,17 @@
     "buoys.hint.2grow": "Посмотр+и на ч+исла: на ск+олько к+аждый раз б+ольше?",
     "buoys.hint.3": "Посмотр+и на миг+ающий буй.",
     "buoys.solution": "Смотр+и: вот как+ой буй н+ужен.",
-    "barrels.hint.tens": "Снач+ала д+есятки: ск+олько ц+елых д+есятков ещё вл+езет?"
+    "barrels.hint.tens": "Снач+ала д+есятки: ск+олько ц+елых д+есятков ещё вл+езет?",
+    "snake.intro": "{name}, познак+омься: +это зм+ейка Ш+уша. Он+а поним+ает т+олько англ+ийские слов+а!",
+    "snake.controls": "Сл+ушай сл+ово и вед+и Ш+ушу к н+ужной карт+инке. Нажим+ай стр+елки +или кн+опки на экр+ане.",
+    "snake.again": "{name}, Ш+уша проголод+алась! Сл+ушай сл+ово.",
+    "snake.yes.0": "Ням! Пр+авильно!",
+    "snake.yes.1": "В+ерно! Вк+усно!",
+    "snake.yes.2": "Т+очно! Ты вним+ательно сл+ушал!",
+    "snake.yes.3": "Да! Ты усл+ышал!",
+    "snake.yes.4": "Ур+а, угад+ал!",
+    "snake.no": "+Это друг+ое сл+ово. Сл+ушай ещё раз:",
+    "snake.win": "{name}, ты накорм+ил Ш+ушу! Ты узн+ал д+есять англ+ийских слов."
   },
   "numbers": {
     "nom": [
@@ -539,6 +549,58 @@
       "emotion": "",
       "speed": "0.85",
       "pitch": 0.8
+    }
+  },
+  "english": {
+    "$comment": "English words for the Snake game: id → what SpeechKit says (en-US voice below). Clips are en.<id>.",
+    "voice": {
+      "voice": "john",
+      "lang": "en-US",
+      "emotion": "",
+      "speed": "0.8"
+    },
+    "words": {
+      "apple": "apple",
+      "banana": "banana",
+      "orange": "orange",
+      "pear": "pear",
+      "grapes": "grapes",
+      "strawberry": "strawberry",
+      "cherry": "cherry",
+      "watermelon": "watermelon",
+      "lemon": "lemon",
+      "carrot": "carrot",
+      "tomato": "tomato",
+      "potato": "potato",
+      "cucumber": "cucumber",
+      "corn": "corn",
+      "onion": "onion",
+      "cat": "cat",
+      "dog": "dog",
+      "fish": "fish",
+      "bird": "bird",
+      "cow": "cow",
+      "pig": "pig",
+      "horse": "horse",
+      "frog": "frog",
+      "duck": "duck",
+      "rabbit": "rabbit",
+      "bear": "bear",
+      "lion": "lion",
+      "monkey": "monkey",
+      "elephant": "elephant",
+      "mouse": "mouse",
+      "turtle": "turtle",
+      "sun": "sun",
+      "star": "star",
+      "ball": "ball",
+      "car": "car",
+      "house": "house",
+      "tree": "tree",
+      "flower": "flower",
+      "boat": "boat",
+      "cake": "cake",
+      "egg": "egg"
     }
   }
 }

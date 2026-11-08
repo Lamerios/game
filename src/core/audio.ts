@@ -12,7 +12,7 @@ interface Manifest {
  * Voice-over (SDD 6): pre-generated SpeechKit mp3 clips played in a row via
  * Web Audio. If any clip of an utterance is missing (not generated yet, offline
  * and not cached, number out of range), the whole utterance goes to the
- * browser's ru-RU voice instead, so the child always hears something.
+ * browser's voice (ru-RU, or the utterance's own language) instead, so the child always hears something.
  */
 export class Voice {
   private enabled = true;
@@ -142,13 +142,14 @@ export class Voice {
     if (typeof speechSynthesis === 'undefined') return done();
     speechSynthesis.cancel();
     const msg = new SpeechSynthesisUtterance(webText(u));
-    msg.lang = 'ru-RU';
+    const lang = u.lang ?? 'ru-RU';
+    msg.lang = lang;
     msg.rate = 0.9;
     // Without generated clips, characters still sound different.
     const sp = u.speaker ? SPEAKERS[u.speaker] : undefined;
     if (sp) msg.pitch = sp.pitch;
-    const ru = speechSynthesis.getVoices().find((v) => v.lang.startsWith('ru'));
-    if (ru) msg.voice = ru;
+    const own = speechSynthesis.getVoices().find((v) => v.lang.replace('_', '-').startsWith(lang.slice(0, 2)));
+    if (own) msg.voice = own;
     msg.onend = done;
     msg.onerror = done;
     speechSynthesis.speak(msg);

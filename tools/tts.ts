@@ -12,7 +12,8 @@
  * voice settings, so unchanged clips are never re-synthesised (and never re-billed).
  *
  * Story lines ("rumb.…", "blot.…") use their speaker's voice from content/phrases.json
- * "speakers"; everything else uses the default below.
+ * "speakers"; English words ("en.…", Snake game) use the en-US voice from "english";
+ * everything else uses the default below.
  * Voice settings: TTS_VOICE (default alena), TTS_EMOTION (default good, '' for none),
  * TTS_SPEED (default 0.9). The key is read from the environment only and never printed.
  */
@@ -20,7 +21,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { allClips, SPEAKERS, speakerOf } from '../src/core/phrases';
+import { allClips, ENGLISH_VOICE, SPEAKERS, speakerOf } from '../src/core/phrases';
 import { allNoteTexts } from '../src/games/note/generator';
 import { allPuzzleTexts } from '../src/games/puzzle/generator';
 import { SECRET_WORD } from '../src/story/script';
@@ -35,6 +36,8 @@ interface VoiceSettings {
   voice: string;
   emotion: string;
   speed: string;
+  /** SpeechKit language; ru-RU when absent. */
+  lang?: string;
 }
 
 interface Manifest {
@@ -52,8 +55,12 @@ const settings: VoiceSettings = {
   speed: process.env.TTS_SPEED || '0.9',
 };
 
+// The language joins the hash only when it is not Russian, so existing clips keep their hashes.
 const hashOf = (text: string, s: VoiceSettings) =>
-  createHash('sha1').update(JSON.stringify([text, s.voice, s.emotion, s.speed])).digest('hex').slice(0, 12);
+  createHash('sha1')
+    .update(JSON.stringify(s.lang && s.lang !== 'ru-RU' ? [text, s.voice, s.emotion, s.speed, s.lang] : [text, s.voice, s.emotion, s.speed]))
+    .digest('hex')
+    .slice(0, 12);
 
 function apiKey(): string {
   const key = process.env.YANDEX_SPEECHKIT_API_KEY;
@@ -65,7 +72,7 @@ function apiKey(): string {
 }
 
 async function synthesize(text: string, s: VoiceSettings, key: string): Promise<Buffer> {
-  const body = new URLSearchParams({ text, lang: 'ru-RU', voice: s.voice, speed: s.speed, format: 'mp3' });
+  const body = new URLSearchParams({ text, lang: s.lang || 'ru-RU', voice: s.voice, speed: s.speed, format: 'mp3' });
   if (s.emotion) body.set('emotion', s.emotion);
   for (let attempt = 1; ; attempt++) {
     const res = await fetch(ENDPOINT, { method: 'POST', headers: { Authorization: `Api-Key ${key}` }, body });
@@ -106,6 +113,7 @@ async function main() {
   const next: Record<string, string> = {};
   const todo: [string, string][] = [];
   const settingsFor = (id: string): VoiceSettings => {
+    if (id.startsWith('en.')) return ENGLISH_VOICE;
     const sp = speakerOf(id);
     if (!sp) return settings;
     const { voice, emotion, speed } = SPEAKERS[sp]!;
