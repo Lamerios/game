@@ -107,7 +107,24 @@ const general = svg(220, 220, `
   <path d="M96 112 C104 118 116 118 124 112" fill="none" ${S}/>
   <path d="M70 52 V22 H82 V32 H94 V22 H106 V32 H118 V22 H130 V32 H142 V22 H150 V52Z" fill="#ffd166" ${S}/>`);
 
-export const CHARACTERS = { rumb, kettle, raccoon, blot, walrus, general } as const;
+/** Treshchotka: a magpie who loves everything shiny and chases the parcel. */
+const magpie = svg(220, 220, `
+  <path d="M120 140 L206 190 L196 204 L112 160Z" fill="#1d3557" ${S}/>
+  <path d="M150 156 L200 186" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+  <path d="M96 190 L90 212 M116 190 L118 212" stroke="${OL}" stroke-width="7" stroke-linecap="round"/>
+  <ellipse cx="104" cy="138" rx="56" ry="54" fill="#22223b" ${S}/>
+  <path d="M66 130 C64 170 92 192 118 188 C132 170 128 140 110 128Z" fill="#fff" ${S}/>
+  <path d="M110 104 C150 96 180 120 170 160 C150 158 126 146 112 128Z" fill="#1d3557" ${S}/>
+  <path d="M126 116 C146 116 160 128 162 146" fill="none" stroke="#4cc9f0" stroke-width="6" stroke-linecap="round"/>
+  <path d="M132 148 C142 150 152 152 160 152" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="92" cy="72" r="44" fill="#22223b" ${S}/>
+  <path d="M52 70 L14 82 L52 90Z" fill="#495057" ${S}/>
+  ${eye(80, 64, 15)}
+  <path d="M66 44 C74 38 86 38 94 44" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="6" stroke-linecap="round"/>
+  <path d="M104 20 C108 8 120 6 122 18 C130 10 140 18 132 28" fill="#22223b" ${S}/>
+  <circle cx="34" cy="120" r="12" fill="#ffd166" ${S}/><path d="M28 116 L34 110 L40 116" fill="none" stroke="#fff" stroke-width="4"/>`);
+
+export const CHARACTERS = { rumb, kettle, raccoon, blot, walrus, general, magpie } as const;
 export type CharacterId = keyof typeof CHARACTERS | 'strelka';
 
 export const CHARACTER_NAME: Record<CharacterId, string> = {
@@ -117,5 +134,6 @@ export const CHARACTER_NAME: Record<CharacterId, string> = {
   blot: 'Капитан Клякса',
   walrus: 'Морж Пломбир',
   general: 'Генерал Ладья',
+  magpie: 'Сорока Трещотка',
   strelka: 'Стрелка',
 };
