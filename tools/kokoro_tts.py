@@ -16,7 +16,8 @@ from kokoro import KPipeline
 
 def spoken(text: str) -> str:
     # A capital and a full stop give a single word a natural, finished intonation.
-    return text[:1].upper() + text[1:] + "."
+    end = "" if text[-1:] in ".!?" else "."
+    return text[:1].upper() + text[1:] + end
 
 
 def main() -> None:

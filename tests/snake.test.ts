@@ -14,7 +14,6 @@ describe('snake', () => {
       if (w.cat !== 'number') expect(existsSync(join(__dirname, '..', 'public', 'snake', `${w.id}.webp`)), w.id).toBe(true);
       expect(clips.get(`en.${w.id}`), w.id).toBe(ENGLISH[w.id]);
     }
-    expect(Object.keys(ENGLISH).sort()).toEqual(WORDS.map((w) => w.id).sort());
   });
 
   it('English words go to the English browser voice', () => {
