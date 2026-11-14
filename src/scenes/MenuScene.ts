@@ -203,17 +203,30 @@ export class MenuScene extends Phaser.Scene {
     });
     if (pages > 1) {
       const cx = COLS_X[1]!;
-      const arrow = (dx: number, enabled: boolean, go: number) => {
-        const c = this.add.container(cx + dx, H - 36);
-        const bg = this.add.circle(0, 0, 28, 0xffffff, enabled ? 0.95 : 0.35).setStrokeStyle(4, 0x14365a);
-        const tri = this.add.triangle(0, 0, 0, -12, 0, 12, 18, 0, 0x14365a).setAngle(go > 0 ? 0 : 180);
-        c.add([bg, tri]).setSize(64, 64);
-        if (enabled) c.setInteractive({ useHandCursor: true }).on('pointerup', () => { this.page += go; this.showCards(true); });
+      // Drawn with Graphics around (0, 0): Phaser's Triangle shape centres on its bounding box, which shifted the arrows off-centre.
+      const arrow = (dx: number, enabled: boolean, go: -1 | 1) => {
+        const g = this.add.graphics();
+        g.fillStyle(0x0b2233, 0.3).fillCircle(0, 4, 32);
+        g.fillStyle(0xffd166).fillCircle(0, 0, 32).lineStyle(5, 0x14365a).strokeCircle(0, 0, 32);
+        // A rounded arrowhead pointing left or right, its visual centre on the circle's centre.
+        const t = go;
+        g.fillStyle(0x14365a).fillTriangle(-9 * t, -15, -9 * t, 15, 15 * t, 0);
+        g.lineStyle(6, 0x14365a).strokeTriangle(-9 * t, -15, -9 * t, 15, 15 * t, 0);
+        const c = this.add.container(cx + dx, H - 38, [g]).setSize(72, 72).setAlpha(enabled ? 1 : 0.35);
+        if (enabled) {
+          c.setInteractive({ useHandCursor: true });
+          c.on('pointerdown', () => c.setScale(0.9));
+          c.on('pointerout', () => c.setScale(1));
+          c.on('pointerup', () => {
+            this.page += go;
+            this.showCards(true);
+          });
+        }
         this.pager.push(c);
       };
       arrow(-130, this.page > 0, -1);
       arrow(130, this.page < pages - 1, 1);
-      for (let p = 0; p < pages; p++) this.pager.push(this.add.circle(cx - (pages - 1) * 14 + p * 28, H - 36, 9, 0xffffff, p === this.page ? 1 : 0.45));
+      for (let p = 0; p < pages; p++) this.pager.push(this.add.circle(cx - (pages - 1) * 14 + p * 28, H - 38, 9, 0xffffff, p === this.page ? 1 : 0.45));
     }
   }
 

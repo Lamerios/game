@@ -5,6 +5,7 @@ import { dueWords, recordWord } from '../../core/wordLog';
 import { goHome } from '../common/home';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
+import { firstTries, loadStats, recordWord as recordStat } from '../../core/wordStats';
 import { button, COLORS, FONT, H, W } from '../../scenes/ui';
 import { mulberry32, shuffle, type Rng } from '../common/rng';
 import {
@@ -19,7 +20,6 @@ const X0 = 30;
 const Y0 = 100;
 const ROUNDS = 10;
 const ITEM_SIZE = 86;
-const STATS_KEY = 'snake-words';
 const INTRO_KEY = 'snake-intro';
 const YES_COUNT = 5;
 
@@ -58,6 +58,9 @@ export function preloadWordPictures(scene: Phaser.Scene, ids: readonly string[])
     else scene.load.svg(`snake-${id}`, `data:image/svg+xml;base64,${btoa(numberSvg(n))}`);
   }
 }
+
+/** All word pictures, for the parent statistics screen. */
+export const preloadWordArt = (scene: Phaser.Scene) => preloadWordPictures(scene, WORDS.map((w) => w.id));
 
 /** English as shown on screen ("seven", "apple"). */
 const en = (id: string) => ENGLISH[id] ?? id;
@@ -113,6 +116,8 @@ export class SnakeScene extends Phaser.Scene {
   private round = 0;
   private target = '';
   private firstTry = true;
+  /** Wrong pictures eaten while the current word was asked, for the parent statistics. */
+  private wrongPicks: string[] = [];
   private eaten: string[] = [];
   private talking = false;
   private talkToken = 0;
@@ -139,7 +144,7 @@ export class SnakeScene extends Phaser.Scene {
 
   create() {
     this.rng = mulberry32(Date.now() & 0xffffffff);
-    this.stats = readStore<Record<string, number>>(STATS_KEY, {});
+    this.stats = firstTries(loadStats());
     this.body = [{ x: 4, y: 5 }, { x: 3, y: 5 }, { x: 2, y: 5 }];
     this.prev = this.body.map((c) => ({ ...c }));
     this.dir = 'right';
@@ -367,6 +372,7 @@ export class SnakeScene extends Phaser.Scene {
     if (this.round >= ROUNDS) return this.win();
     this.target = this.words[this.round]!;
     this.firstTry = true;
+    this.wrongPicks = [];
     this.repeats = 0;
     this.showCard();
     const ids = [this.target, ...distractors(this.target, itemsForRound(this.round) - 1, this.round, this.rng)];
@@ -461,6 +467,7 @@ export class SnakeScene extends Phaser.Scene {
     if (item.id !== this.target) {
       if (this.firstTry) recordWord(this.target, false, 'snake');
       this.firstTry = false;
+      this.wrongPicks.push(item.id);
       this.cameras.main.shake(120, 0.003);
       this.tweens.add({ targets: item.img, alpha: 0, scale: item.img.scale * 1.6, duration: 400, onComplete: () => item.img.destroy() });
       this.floatWord(item.id, item.img.x, item.img.y, '#ffffff');
@@ -476,7 +483,7 @@ export class SnakeScene extends Phaser.Scene {
       this.stats[item.id] = (this.stats[item.id] ?? 0) + 1;
       recordWord(item.id, true, 'snake');
     }
-    writeStore(STATS_KEY, this.stats);
+    recordStat(item.id, this.wrongPicks);
     this.burst(item.img.x, item.img.y);
     this.floatWord(item.id, item.img.x, item.img.y, '#ffd166');
     this.tweens.add({
