@@ -11,6 +11,8 @@
  * games that pick words ask `dueWords()` first. Pure TS + localStorage, no Phaser.
  */
 
+import { addAsk, loadStats, saveStats } from './wordStats';
+
 /** Days until the next review, by box. Box 0 = met today, not learnt yet. */
 export const BOX_DAYS = [0, 1, 3, 7, 14, 30] as const;
 export const MAX_BOX = BOX_DAYS.length - 1;
@@ -81,12 +83,30 @@ export function review(entry: WordEntry | undefined, ok: boolean, game: string, 
 }
 
 /** Records one asked word: `ok` = picked / said right on the first try. */
-export function recordWord(id: string, ok: boolean, game: string, now = Date.now()): WordEntry {
+/**
+ * Records one ask of an English word, in both books: the review schedule here
+ * and the parents' word statistics (core/wordStats). `wrong` = what was picked
+ * instead, when the game knows it; a miss without it counts as one miss.
+ */
+export function recordWord(id: string, ok: boolean, game: string, now = Date.now(), wrong?: readonly string[]): WordEntry {
   const log = readWordLog();
   const e = review(log[id], ok, game, now);
   log[id] = e;
   writeWordLog(log);
+  saveStats(addAsk(loadStats(), id, wrong ?? (ok ? [] : ['']), now));
   return e;
+}
+
+/** Russian labels for the parents' screen, for words that aren't Snake pictures. */
+const RU_LABEL: Record<string, string> = {
+  'dir.north': 'север', 'dir.south': 'юг', 'dir.east': 'восток', 'dir.west': 'запад',
+  'piece.k': 'король', 'piece.q': 'ферзь', 'piece.r': 'ладья', 'piece.b': 'слон', 'piece.n': 'конь', 'piece.p': 'пешка',
+  'emo.happy': 'радостный', 'emo.sad': 'грустный', 'emo.angry': 'сердитый', 'emo.scared': 'испуганный', 'emo.surprised': 'удивлённый',
+};
+export function ruLabel(id: string): string {
+  if (RU_LABEL[id]) return RU_LABEL[id]!;
+  const n = /^n(\d+)$/.exec(id);
+  return n ? `число ${n[1]}` : '';
 }
 
 /** Words due for review now, most overdue first. `pool` limits them to what a game can show. */

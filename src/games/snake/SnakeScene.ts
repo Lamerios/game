@@ -5,7 +5,7 @@ import { dueWords, recordWord } from '../../core/wordLog';
 import { goHome } from '../common/home';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
-import { firstTries, loadStats, recordWord as recordStat } from '../../core/wordStats';
+import { firstTries, loadStats } from '../../core/wordStats';
 import { button, COLORS, FONT, H, W } from '../../scenes/ui';
 import { mulberry32, shuffle, type Rng } from '../common/rng';
 import {
@@ -465,7 +465,6 @@ export class SnakeScene extends Phaser.Scene {
     this.paused = true;
     this.run?.answer({ item: this.target, correct: item.id === this.target, chosen: item.id === this.target ? undefined : item.id, round: this.round });
     if (item.id !== this.target) {
-      if (this.firstTry) recordWord(this.target, false, 'snake');
       this.firstTry = false;
       this.wrongPicks.push(item.id);
       this.cameras.main.shake(120, 0.003);
@@ -479,11 +478,9 @@ export class SnakeScene extends Phaser.Scene {
     this.grow++;
     const slot = this.eaten.length;
     this.eaten.push(item.id);
-    if (this.firstTry) {
-      this.stats[item.id] = (this.stats[item.id] ?? 0) + 1;
-      recordWord(item.id, true, 'snake');
-    }
-    recordStat(item.id, this.wrongPicks);
+    if (this.firstTry) this.stats[item.id] = (this.stats[item.id] ?? 0) + 1;
+    // One record per ask, in the review schedule and the parents' statistics.
+    recordWord(item.id, this.firstTry, 'snake', Date.now(), this.wrongPicks);
     this.burst(item.img.x, item.img.y);
     this.floatWord(item.id, item.img.x, item.img.y, '#ffd166');
     this.tweens.add({

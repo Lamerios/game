@@ -4,6 +4,7 @@ import { english, ENGLISH } from '../core/phrases';
 import { loadStats, report, type Row, type Status } from '../core/wordStats';
 import { preloadWordArt } from '../games/snake/SnakeScene';
 import { WORDS } from '../games/snake/logic';
+import { ruLabel } from '../core/wordLog';
 import { button, FONT, H, W } from './ui';
 
 const TOP = 196;
@@ -16,7 +17,7 @@ const STATUS: Record<Status, { label: string; color: number; text: string }> = {
   learnt: { label: 'выучено', color: 0x43aa8b, text: '#ffffff' },
 };
 
-const ruOf = (id: string) => WORDS.find((w) => w.id === id)?.ru ?? '';
+const ruOf = (id: string) => WORDS.find((w) => w.id === id)?.ru ?? ruLabel(id);
 const enOf = (id: string) => ENGLISH[id] ?? id;
 
 function ago(ts: number): string {
