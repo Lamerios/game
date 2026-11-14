@@ -34,11 +34,17 @@ FADE_OUT = 0.05
 # That hiss sits inside the last word's timing, so it is also trimmed by
 # signal: frames at the end that are mostly above 4 kHz. Words that really
 # end in a hissing sound or a released p/t/k (socks, fish, cat) are left alone.
-FRICATIVES = set("szʃʒfvθðʧʤhptk")
+HISSING_ENDS = ("s", "x", "z", "f", "h", "p", "t", "k", "ce", "se", "ze", "ge", "pe", "te", "ke", "fe", "ve")
 
 
-def trim_hiss(pcm: np.ndarray, last_phoneme: str, sr: int = 24000) -> np.ndarray:
-    if not last_phoneme or last_phoneme in FRICATIVES:
+def ends_hissing(text: str) -> bool:
+    """The text's last word ends in a hissing sound or p/t/k (socks, leaf, peach, cat, cake)."""
+    w = "".join(c for c in text.lower() if c.isalpha() or c == " ").strip().split(" ")[-1]
+    return w.endswith(HISSING_ENDS)
+
+
+def trim_hiss(pcm: np.ndarray, text: str, sr: int = 24000) -> np.ndarray:
+    if ends_hissing(text):
         return pcm
     fr = int(0.01 * sr)
     end = len(pcm)
@@ -71,11 +77,10 @@ def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
             j = len(pcm)
             if words:
                 j = min(len(pcm), int((words[-1].end_ts + TAIL) * 24000))
-            last = ""
-            if words and words[-1].phonemes:
-                last = [c for c in words[-1].phonemes if c.isalpha() or c in FRICATIVES][-1:]
-                last = last[0] if last else ""
-            out = trim_hiss(pcm[i:j], last).copy()
+            out = pcm[i:j]
+            n0 = len(out)
+            out = trim_hiss(out, text).copy()
+            print(f"    cut: end_ts={'yes' if words else 'none'}, hiss trimmed {(n0 - len(out)) / 24:.0f} ms", flush=True)
             n = min(len(out), int(FADE * 24000))
             out[:n] *= np.linspace(0.0, 1.0, n, dtype=np.float32)
             m = min(len(out), int(FADE_OUT * 24000))

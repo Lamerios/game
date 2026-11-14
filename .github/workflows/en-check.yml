@@ -6,6 +6,10 @@ on:
     paths:
       - tools/check_en.py
       - .github/workflows/en-check.yml
+  # After the voice-over run has committed new clips (takes effect once this file is on main).
+  workflow_run:
+    workflows: ['Voice-over (SpeechKit)']
+    types: [completed]
   workflow_dispatch:
     inputs:
       old:
@@ -16,7 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: |
