@@ -1,0 +1,11 @@
+{
+  "name": "Кругосветка юнги",
+  "short_name": "Кругосветка",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b2233",
+  "theme_color": "#1b4965",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

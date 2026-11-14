@@ -40,6 +40,9 @@ const RUMBLE = 0.14;
 const WALK = 1.5;
 const CAR_PX = 300;
 const CAR_Y = 700;
+/** Boards closer than this slow the car to SLOW of its speed. */
+const SLOW_Z = 18;
+const SLOW = 0.75;
 const LANE_COLORS = [0x3a86ff, 0xf77f00, 0x8338ec, 0x06d6a0];
 
 interface Thing {
@@ -134,6 +137,12 @@ export class RaceScene extends Phaser.Scene {
   private lineText?: Phaser.GameObjects.Text;
   private results: (boolean | undefined)[] = [];
   private crashes = 0;
+  /** Slows the car down to 75% while word boards come close. */
+  private slow = 1;
+  /** Speed while the car rolls to a stop after a crash. */
+  private coast = 0;
+  /** What the car really does now, road units per second. */
+  private shown = 0;
   /** Analytics run of the current race. */
   private tele?: Run;
   private sincePit = 0;
@@ -750,8 +759,7 @@ export class RaceScene extends Phaser.Scene {
       } else {
         this.missed.push(row.target);
         recordWord(row.target, false, 'race');
-        const line = this.ru(`raccoon.race.crash.${Math.floor(this.rng() * 3)}`);
-        if (!(await this.talk(line, english(res.word), this.ru('raccoon.race.need'), english(row.target)))) return;
+        if (!(await this.review(row.target, res.word, run))) return;
       }
       if (this.coneHit && !this.coneTold) {
         this.coneTold = true;
@@ -775,6 +783,62 @@ export class RaceScene extends Phaser.Scene {
     this.showResults();
   }
 
+  /** After a crash into a wrong board: the car stands, both words are shown and said, then on we go. */
+  private async review(target: string, wrong: string, run: number): Promise<boolean> {
+    while (this.coast > 0.05 && run === this.run) if (!(await this.wait(50, run))) return false;
+    const layer: Phaser.GameObjects.GameObject[] = [];
+    const d = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(3200);
+      layer.push(this.keep(o));
+      return o;
+    };
+    d(this.add.rectangle(W / 2, 420, 820, 400, 0x14213d, 0.92).setStrokeStyle(5, 0xffd166));
+    d(this.add.text(W / 2, 250, 'Разберём слова', { fontFamily: FONT, fontSize: '36px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5));
+    const card = (x: number, word: string, good: boolean, label: string) => {
+      const c = d(this.makeBoard(word, good ? 3 : 1).setPosition(x, 600).setScale(0.8));
+      d(this.add.text(x, 302, label, { fontFamily: FONT, fontSize: '28px', color: '#ffffff' }).setOrigin(0.5));
+      const mark = this.add.graphics({ x: x + 110, y: 302 });
+      mark.fillStyle(good ? 0x38b000 : 0xe63946).fillCircle(0, 0, 26);
+      mark.lineStyle(8, 0xffffff);
+      if (good) mark.beginPath().moveTo(-12, 0).lineTo(-3, 10).lineTo(13, -10).strokePath();
+      else mark.lineBetween(-10, -10, 10, 10).lineBetween(10, -10, -10, 10);
+      d(mark);
+      return c;
+    };
+    const bad = card(W / 2 - 200, wrong, false, 'Ты въехал');
+    const good = card(W / 2 + 200, target, true, 'А нужно');
+    const line = this.ru(`raccoon.race.crash.${Math.floor(this.rng() * 3)}`);
+    this.tweens.add({ targets: bad, scale: 0.84, yoyo: true, duration: 300 });
+    if (!(await this.talk(line, english(wrong)))) return false;
+    this.tweens.add({ targets: good, scale: 0.86, yoyo: true, repeat: 2, duration: 300 });
+    if (!(await this.talk(this.ru('raccoon.race.need'), english(target)))) return false;
+    if (!(await this.wait(500, run))) return false;
+    if (!(await this.talk(english(target)))) return false;
+    // on: the button, Space/Enter, or by itself after a while
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const go = () => {
+        if (done) return;
+        done = true;
+        this.input.keyboard?.off('keydown', onKey);
+        resolve();
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp') go();
+      };
+      this.input.keyboard?.on('keydown', onKey);
+      const b = d(button(this, W / 2, 668, 'Поехали!', go, { w: 360, h: 84, color: 0xe63946 }));
+      this.tweens.add({ targets: b, scale: 1.06, yoyo: true, repeat: -1, duration: 400 });
+      this.time.delayedCall(6000, go);
+    });
+    layer.forEach((o) => o.destroy());
+    if (run !== this.run) return false;
+    this.spin = 0;
+    this.speed = this.track.minSpeed;
+    this.driving = true;
+    return true;
+  }
+
   private crashFx(kind: 'board' | 'cone') {
     this.crashes++;
     this.sincePit++;
@@ -782,8 +846,16 @@ export class RaceScene extends Phaser.Scene {
     this.crashSound();
     this.cameras.main.shake(350, kind === 'board' ? 0.014 : 0.008);
     this.cameras.main.flash(180, 255, 80, 80);
-    this.spin = 0.9;
-    this.speed = Math.max(this.track.minSpeed * 0.5, this.speed * 0.4);
+    if (kind === 'board') {
+      // a wrong word: the car stops for a look at both words
+      this.driving = false;
+      this.coast = this.shown * 0.6;
+      this.spin = 0.5;
+      this.gas = this.brake = false;
+    } else {
+      this.spin = 0.9;
+      this.speed = Math.max(this.track.minSpeed * 0.5, this.speed * 0.4);
+    }
     const bang = this.keep(this.add.text(W / 2, 420, kind === 'board' ? 'БАМ!' : 'БУМ!', { fontFamily: FONT, fontSize: '96px', color: '#ffd166', fontStyle: 'bold', stroke: '#e63946', strokeThickness: 14 }).setOrigin(0.5).setDepth(3050));
     this.tweens.add({ targets: bang, scale: { from: 0.4, to: 1.2 }, alpha: { from: 1, to: 0 }, y: 360, duration: 900, onComplete: () => bang.destroy() });
     // a burst of little stars
@@ -819,11 +891,18 @@ export class RaceScene extends Phaser.Scene {
         this.speed = Math.min(this.speed + 3 * dt, this.track.minSpeed);
       }
       this.brakeGlow?.setFillStyle(0xff3030, down ? 0.35 : 0);
-      this.pos += this.speed * dt;
+    } else {
+      this.coast = Math.max(0, this.coast - 22 * dt);
+      if (this.spin > 0) this.spin -= dt;
     }
+    // ease off by a quarter when the word boards come close, so there is time to choose
+    const near = this.pendingRow && this.pendingRow.s - this.pos < SLOW_Z;
+    this.slow += ((near ? SLOW : 1) - this.slow) * Math.min(1, dt * 4);
+    this.shown = this.driving ? this.speed * this.slow : this.coast;
+    this.pos += this.shown * dt;
     // the road bends gently from side to side
     this.curve = 0.006 * Math.sin(this.pos / 37) * Math.sin(this.pos / 91 + 1);
-    if (this.skyline) this.skyline.tilePositionX += this.curve * this.speed * dt * 900;
+    if (this.skyline) this.skyline.tilePositionX += this.curve * this.shown * dt * 900;
     // the car slides to its lane
     const target = this.laneX(this.lane);
     const dx = target - this.carX;
@@ -982,7 +1061,7 @@ export class RaceScene extends Phaser.Scene {
     const car = this.car;
     if (!car) return;
     const p = this.project(Z_HIT, this.carX);
-    const shake = this.driving ? Math.sin(time / 30) * (0.6 + this.speed / 20) : 0;
+    const shake = this.shown > 0.1 ? Math.sin(time / 30) * (0.6 + this.shown / 20) : 0;
     car.x = p.x;
     car.y = CAR_Y + shake;
     car.angle = this.spin > 0 ? Math.sin(this.spin * 14) * 12 : Phaser.Math.Clamp(dx * 14, -8, 8);
@@ -995,7 +1074,7 @@ export class RaceScene extends Phaser.Scene {
     const fx = this.fx!;
     fx.clear();
     const t = this.track;
-    const share = this.speed / t.maxSpeed;
+    const share = this.shown / t.maxSpeed;
     // speed streaks fly out from the far end of the road when going fast
     if (this.driving && share > 0.55 && this.streaks.length < 40 && this.rng() < share) this.streaks.push({ a: this.rng() * Math.PI * 2, r: 120, v: 900 + this.rng() * 600 });
     const cx = W / 2 + this.bend(ZFAR) * (FOCAL / ZFAR) - this.camX * (FOCAL / ZFAR);
@@ -1012,11 +1091,11 @@ export class RaceScene extends Phaser.Scene {
     const n = this.needle;
     if (n) {
       n.clear();
-      const a = Math.PI * 0.75 + Math.min(1, this.speed / 22) * Math.PI * 1.5;
+      const a = Math.PI * 0.75 + Math.min(1, this.shown / 22) * Math.PI * 1.5;
       n.lineStyle(6, 0xff4d4d).lineBetween(0, 0, Math.cos(a) * 56, Math.sin(a) * 56);
       n.fillStyle(0xffffff).fillCircle(0, 0, 8);
     }
-    this.kmh?.setText(String(Math.round(this.speed * 10)));
+    this.kmh?.setText(String(Math.round(this.shown * 10)));
   }
 
   // ---------- pit stop: ten squats while the car is repaired ----------
@@ -1025,6 +1104,7 @@ export class RaceScene extends Phaser.Scene {
     this.driving = false;
     const was = this.speed;
     this.speed = 0;
+    this.coast = 0;
     const items: Phaser.GameObjects.GameObject[] = [];
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
       items.push(this.keep(o));
