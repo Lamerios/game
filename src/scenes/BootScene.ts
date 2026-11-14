@@ -31,7 +31,7 @@ export class BootScene extends Phaser.Scene {
       if (ctx && ctx.state === 'suspended') void ctx.resume();
       voice.unlock();
       // …/game/#snake, #parcel and #race open those English games straight away.
-      const direct: Record<string, string> = { '#snake': 'Snake', '#parcel': 'Parcel', '#race': 'Race' };
+      const direct: Record<string, string> = { '#snake': 'Snake', '#parcel': 'Parcel', '#race': 'Race', '#inverse': 'Inverse', '#logbook': 'Logbook' };
       this.scene.start(direct[location.hash] ?? 'Harbor');
     }, { w: 460 });
   }

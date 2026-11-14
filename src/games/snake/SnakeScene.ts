@@ -43,6 +43,18 @@ function colorSvg(paint: string): string {
     <ellipse cx="72" cy="62" rx="22" ry="12" transform="rotate(-25 72 62)" fill="#ffffff" fill-opacity=".45"/></svg>`;
 }
 
+/** Queues the pictures of these words (texture `snake-<id>`): photos, drawn colours and numbers. Shared with other word games. */
+export function preloadWordPictures(scene: Phaser.Scene, ids: readonly string[]) {
+  for (const id of ids) {
+    if (scene.textures.exists(`snake-${id}`)) continue;
+    const n = numberOf(id);
+    const paint = PAINTS.find((c) => c.id === id)?.paint;
+    if (paint) scene.load.svg(`snake-${id}`, `data:image/svg+xml;base64,${btoa(colorSvg(paint))}`);
+    else if (n === undefined) scene.load.image(`snake-${id}`, `${import.meta.env.BASE_URL}snake/${id}.webp`);
+    else scene.load.svg(`snake-${id}`, `data:image/svg+xml;base64,${btoa(numberSvg(n))}`);
+  }
+}
+
 /** English as shown on screen ("seven", "apple"). */
 const en = (id: string) => ENGLISH[id] ?? id;
 
@@ -113,14 +125,7 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   preload() {
-    for (const w of WORDS) {
-      if (this.textures.exists(`snake-${w.id}`)) continue;
-      const n = numberOf(w.id);
-      const paint = PAINTS.find((c) => c.id === w.id)?.paint;
-      if (paint) this.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(colorSvg(paint))}`);
-      else if (n === undefined) this.load.image(`snake-${w.id}`, `${import.meta.env.BASE_URL}snake/${w.id}.webp`);
-      else this.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(numberSvg(n))}`);
-    }
+    preloadWordPictures(this, WORDS.map((w) => w.id));
   }
 
   create() {

@@ -1,5 +1,6 @@
 import { carSvg } from './race/art';
 import { CARS } from './race/logic';
+import { YUNGA } from './inverse/art';
 
 /**
  * Every game on the main menu. To add a game: add its scene to main.ts and one
@@ -79,6 +80,26 @@ export const GAMES: GameEntry[] = [
     skills: ['english', 'movement'],
     color: 0xe63946,
     icon: { key: 'menu-race', svg: carSvg(CARS[0]!) },
+  },
+  {
+    id: 'inverse',
+    scene: 'Inverse',
+    title: 'Наоборот, юнга!',
+    subtitle: 'Команды и флаги',
+    skills: ['english', 'attention', 'movement'],
+    color: 0x9b5de5,
+    icon: { key: 'menu-inverse', svg: YUNGA },
+    isNew: true,
+  },
+  {
+    id: 'logbook',
+    scene: 'Logbook',
+    title: 'Судовой журнал',
+    subtitle: 'Вспомни слова',
+    skills: ['english', 'memory'],
+    color: 0x7a4a24,
+    icon: { key: 'crate' },
+    isNew: true,
   },
 ];
 
