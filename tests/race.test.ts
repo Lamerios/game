@@ -64,3 +64,18 @@ describe('race', () => {
     expect(CARS.map((c) => c.id)).toContain(parseProgress(null).car);
   });
 });
+
+describe('race number line', () => {
+  it('booster landing options hold the right place and stay on the line', async () => {
+    const { landingOptions, LINE_MAX, boosterPair } = await import('../src/games/race/logic');
+    const rng = mulberry32(8);
+    for (let pos = 0; pos <= 25; pos++) for (const v of [2, 3, 5]) {
+      const o = landingOptions(pos, v, rng);
+      expect(o).toContain(Math.min(LINE_MAX, pos + v));
+      expect(new Set(o).size).toBe(o.length);
+      for (const x of o) expect(x > pos && x <= LINE_MAX).toBe(true);
+    }
+    expect(boosterPair(3)).toEqual([2, 3]);
+    for (let n = 0; n <= LINE_MAX; n++) expect(ENGLISH[`n${n}`], `n${n}`).toBeDefined();
+  });
+});

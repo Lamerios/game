@@ -1,5 +1,5 @@
 import { startRun, type Run } from './core/analytics';
-import { recordOutcome, recordReview } from './core/adaptivity';
+import { recordFastOutcome, recordOutcome, recordReview } from './core/adaptivity';
 import { createProfile, DEFAULT_CHILD_NAME } from './core/profile';
 import { canStartSession, finishSession, isTimeUp, startSession, type Gate } from './core/session';
 import { Storage } from './core/storage';
@@ -111,7 +111,7 @@ export class GameState {
     const st = this.profile.skills[skill];
     this.profile = {
       ...this.profile,
-      skills: { ...this.profile.skills, [skill]: recordOutcome(st, outcome, now, this.profile.calibrating).state },
+      skills: { ...this.profile.skills, [skill]: recordFastOutcome(st, outcome, now, this.profile.calibrating).state },
       currentSession: { ...session, seaDone: true },
     };
     this.logAnswer('sea', skill, level, outcome, itemId, hintsUsed, durationMs);

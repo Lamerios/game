@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dueReviews,
+  recordFastOutcome,
   recordOutcome,
   recordReview,
   REVIEW_INTERVALS_DAYS,
@@ -126,3 +127,26 @@ function mulberry32(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+describe('fast rule for action stages', () => {
+  const base: SkillState = { level: 2, maxLevel: 7, window: [], reviewQueue: [], lastPlayedAt: 0 };
+  it('three clean wins in a row → level up', () => {
+    let s = base;
+    s = recordFastOutcome(s, 'first_try', 1).state;
+    s = recordFastOutcome(s, 'first_try', 2).state;
+    const r = recordFastOutcome(s, 'first_try', 3);
+    expect(r.change).toBe('up');
+    expect(r.state.level).toBe(3);
+  });
+  it('two shown solutions in a row → level down', () => {
+    const s = recordFastOutcome(base, 'shown', 1).state;
+    const r = recordFastOutcome(s, 'shown', 2);
+    expect(r.change).toBe('down');
+    expect(r.state.level).toBe(1);
+  });
+  it('mixed results keep the level', () => {
+    let s = base;
+    for (const o of ['first_try', 'with_hint', 'first_try'] as const) s = recordFastOutcome(s, o, 1).state;
+    expect(s.level).toBe(2);
+  });
+});

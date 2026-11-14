@@ -1,12 +1,15 @@
 import Phaser from 'phaser';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
+import { dueWords, recordWord } from '../../core/wordLog';
+import { goHome } from '../common/home';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
 import { button, COLORS, FONT, H, W } from '../../scenes/ui';
-import { mulberry32, type Rng } from '../common/rng';
+import { mulberry32, shuffle, type Rng } from '../common/rng';
 import {
-  COLORS as PAINTS, DIRS, distractors, itemsForRound, moveSnake, numberOf, OPPOSITE, placeItems, planGame, WORDS, wordById, type Cell, type Dir, type Mode,
+  COLORS as PAINTS, DIRS, distractors, itemsForRound, moveSnake, numberOf, OPPOSITE, placeItems, planGame, planRules, planSounds, WORDS, wordById,
+  type Cell, type Dir, type Mode, type MultiRound,
 } from './logic';
 
 const CELL = 60;
@@ -42,6 +45,18 @@ function colorSvg(paint: string): string {
       C98 144 100 168 86 170 C72 172 74 150 62 146 C44 140 22 128 22 92 C22 54 58 24 96 22Z"
       fill="${paint}" stroke="#2b2d42" stroke-width="7" stroke-linejoin="round"/>
     <ellipse cx="72" cy="62" rx="22" ry="12" transform="rotate(-25 72 62)" fill="#ffffff" fill-opacity=".45"/></svg>`;
+}
+
+/** Queues the pictures of these words (texture `snake-<id>`): photos, drawn colours and numbers. Shared with other word games. */
+export function preloadWordPictures(scene: Phaser.Scene, ids: readonly string[]) {
+  for (const id of ids) {
+    if (scene.textures.exists(`snake-${id}`)) continue;
+    const n = numberOf(id);
+    const paint = PAINTS.find((c) => c.id === id)?.paint;
+    if (paint) scene.load.svg(`snake-${id}`, `data:image/svg+xml;base64,${btoa(colorSvg(paint))}`);
+    else if (n === undefined) scene.load.image(`snake-${id}`, `${import.meta.env.BASE_URL}snake/${id}.webp`);
+    else scene.load.svg(`snake-${id}`, `data:image/svg+xml;base64,${btoa(numberSvg(n))}`);
+  }
 }
 
 /** English as shown on screen ("seven", "apple"). */
@@ -89,11 +104,15 @@ export class SnakeScene extends Phaser.Scene {
   private grow = 0;
   private items: Item[] = [];
   private words: string[] = [];
+  /** Rule / sound rounds: several right pictures per round. Empty in the word modes. */
+  private multi: MultiRound[] = [];
+  private need = new Set<string>();
+  private run?: Run;
+  private askedAt = 0;
   private mode?: Mode;
   private round = 0;
   private target = '';
   private firstTry = true;
-  private run?: Run;
   private eaten: string[] = [];
   private talking = false;
   private talkToken = 0;
@@ -115,14 +134,7 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   preload() {
-    for (const w of WORDS) {
-      if (this.textures.exists(`snake-${w.id}`)) continue;
-      const n = numberOf(w.id);
-      const paint = PAINTS.find((c) => c.id === w.id)?.paint;
-      if (paint) this.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(colorSvg(paint))}`);
-      else if (n === undefined) this.load.image(`snake-${w.id}`, `${import.meta.env.BASE_URL}snake/${w.id}.webp`);
-      else this.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(numberSvg(n))}`);
-    }
+    preloadWordPictures(this, WORDS.map((w) => w.id));
   }
 
   create() {
@@ -152,6 +164,8 @@ export class SnakeScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.talkToken++;
       voice.stop();
+      this.run?.end({ completed: false, score: this.eaten.length });
+      this.run = undefined;
     });
     this.render(1);
     if (this.mode) this.begin(this.mode);
@@ -168,12 +182,14 @@ export class SnakeScene extends Phaser.Scene {
       ['words', 'Слова', ['snake-apple', 'snake-cat']],
       ['numbers', 'Числа', ['snake-n3', 'snake-n15']],
       ['mix', 'Всё вместе', ['snake-banana', 'snake-n7']],
+      ['rules', 'Правило', ['snake-lion', 'snake-car']],
+      ['sounds', 'Первый звук', ['snake-ball', 'snake-bus']],
     ];
     options.forEach(([mode, label, icons], i) => {
-      const b = button(this, cx, 220 + i * 150, `          ${label}`, () => {
+      const b = button(this, cx, 190 + i * 112, `          ${label}`, () => {
         layer.forEach((o) => o.destroy());
         this.begin(mode);
-      }, { w: 520, h: 120, color: [0x40916c, 0x277da1, 0x8d5524][i] });
+      }, { w: 520, h: 100, color: [0x40916c, 0x277da1, 0x8d5524, 0x9b5de5, 0xe76f51][i] });
       icons.forEach((key, j) => b.add(this.add.image(-200 + j * 70, 0, key).setDisplaySize(80, 80)));
       layer.push(b);
     });
@@ -183,8 +199,11 @@ export class SnakeScene extends Phaser.Scene {
 
   private begin(mode: Mode) {
     this.mode = mode;
-    this.words = planGame(mode, this.stats, ROUNDS, this.rng);
-    this.run = startRun('snake', { mode, words: this.words.length });
+    this.run = startRun('snake', { mode });
+    if (mode === 'rules') this.multi = planRules(this.rng, ROUNDS / 2);
+    else if (mode === 'sounds') this.multi = planSounds(this.rng, ROUNDS);
+    else this.multi = [];
+    this.words = this.multi.length ? [] : planGame(mode, this.stats, ROUNDS, this.rng, dueWords());
     void this.startRound();
   }
 
@@ -213,7 +232,7 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private drawPanel() {
-    button(this, 1170, 46, 'Домой', () => this.scene.start('Menu'), { w: 170, h: 64, color: 0x6c757d });
+    button(this, 1170, 46, 'Домой', () => goHome(this), { w: 170, h: 64, color: 0x6c757d });
     const listen = button(this, 1080, 160, '     Ещё раз', () => this.repeatWord(), { w: 340, h: 100, color: COLORS.leaf });
     const icon = this.add.graphics({ x: -110, y: 0 });
     icon.fillStyle(0xffffff).fillRect(-22, -12, 14, 24).fillTriangle(-10, -12, 10, -28, 10, 28).fillTriangle(-10, 12, 10, -28, 10, 28);
@@ -344,22 +363,15 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private async startRound() {
+    if (this.multi.length) return this.startMultiRound();
     if (this.round >= ROUNDS) return this.win();
     this.target = this.words[this.round]!;
     this.firstTry = true;
     this.repeats = 0;
     this.showCard();
     const ids = [this.target, ...distractors(this.target, itemsForRound(this.round) - 1, this.round, this.rng)];
-    const cells = placeItems(ids.length, this.body, this.queue.at(-1) ?? this.dir, COLS, ROWS, this.rng);
-    this.items = cells.map((cell, i) => {
-      const { x, y } = px(cell);
-      const img = this.add.image(x, y, `snake-${ids[i]}`).setDisplaySize(ITEM_SIZE, ITEM_SIZE).setDepth(4);
-      const s = img.scale;
-      img.setScale(0);
-      this.tweens.add({ targets: img, scale: s, duration: 350, delay: i * 120, ease: 'Back.easeOut' });
-      this.tweens.add({ targets: img, angle: { from: -4, to: 4 }, yoyo: true, repeat: -1, duration: 900 + i * 90, ease: 'Sine.easeInOut' });
-      return { id: ids[i]!, cell, img };
-    });
+    this.spawnItems(ids);
+    this.askedAt = Date.now();
 
     this.paused = true;
     const lines: Utterance[] = [];
@@ -378,6 +390,56 @@ export class SnakeScene extends Phaser.Scene {
     }
   }
 
+  /** "Only animals!" / "Find a word that starts like ball!": every right picture is eaten, the others are left. */
+  private async startMultiRound() {
+    if (this.round >= this.multi.length) return this.win();
+    const r = this.multi[this.round]!;
+    const prev = this.multi[this.round - 1];
+    this.target = r.line;
+    this.need = new Set(r.ok);
+    this.firstTry = true;
+    this.repeats = 0;
+    this.showRuleCard(r);
+    this.spawnItems(shuffle(this.rng, [...r.ok, ...r.avoid]));
+    this.askedAt = Date.now();
+    this.paused = true;
+    const lines: Utterance[] = [];
+    const rules = this.mode === 'rules';
+    if (this.round === 0) lines.push(phrase(rules ? 'snake.rules.intro' : 'snake.sounds.intro'));
+    else if (rules && prev && prev.line !== r.line) {
+      lines.push(phrase('snake.rules.switch'));
+      this.run?.event('rule_switch', { from: prev.line, to: r.line });
+    }
+    lines.push(english(r.line));
+    if (!rules) lines.push(english(r.cue));
+    if (await this.talk(...lines)) {
+      this.paused = false;
+      this.run?.ask(r.line, { round: this.round, options: r.ok.length + r.avoid.length });
+    }
+  }
+
+  private showRuleCard(r: MultiRound) {
+    this.card.removeAll(true);
+    this.card.add(this.add.rectangle(0, 0, 340, 200, 0xfffaf0).setStrokeStyle(5, 0x1b4332));
+    this.card.add(this.add.image(-100, -10, `snake-${r.cue}`).setDisplaySize(110, 110));
+    const text = ENGLISH[r.line] ?? r.line;
+    this.card.add(this.add.text(55, -10, text, { fontFamily: FONT, fontSize: '28px', color: '#1b4332', fontStyle: 'bold', align: 'center', wordWrap: { width: 190 } }).setOrigin(0.5));
+    if (this.mode === 'sounds') this.card.add(this.add.text(-100, 70, en(r.cue), { fontFamily: FONT, fontSize: '26px', color: '#6c757d' }).setOrigin(0.5));
+  }
+
+  private spawnItems(ids: string[]) {
+    const cells = placeItems(ids.length, this.body, this.queue.at(-1) ?? this.dir, COLS, ROWS, this.rng);
+    this.items = cells.map((cell, i) => {
+      const { x, y } = px(cell);
+      const img = this.add.image(x, y, `snake-${ids[i]}`).setDisplaySize(ITEM_SIZE, ITEM_SIZE).setDepth(4);
+      const s = img.scale;
+      img.setScale(0);
+      this.tweens.add({ targets: img, scale: s, duration: 350, delay: i * 120, ease: 'Back.easeOut' });
+      this.tweens.add({ targets: img, angle: { from: -4, to: 4 }, yoyo: true, repeat: -1, duration: 900 + i * 90, ease: 'Sine.easeInOut' });
+      return { id: ids[i]!, cell, img };
+    });
+  }
+
   private step() {
     this.dir = this.queue.shift() ?? this.dir;
     const old = this.body;
@@ -391,11 +453,13 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private async eat(item: Item) {
+    if (this.multi.length) return this.eatMulti(item);
     this.items = this.items.filter((it) => it !== item);
     this.tweens.killTweensOf(item.img);
     this.paused = true;
     this.run?.answer({ item: this.target, correct: item.id === this.target, chosen: item.id === this.target ? undefined : item.id, round: this.round });
     if (item.id !== this.target) {
+      if (this.firstTry) recordWord(this.target, false, 'snake');
       this.firstTry = false;
       this.cameras.main.shake(120, 0.003);
       this.tweens.add({ targets: item.img, alpha: 0, scale: item.img.scale * 1.6, duration: 400, onComplete: () => item.img.destroy() });
@@ -408,7 +472,10 @@ export class SnakeScene extends Phaser.Scene {
     this.grow++;
     const slot = this.eaten.length;
     this.eaten.push(item.id);
-    if (this.firstTry) this.stats[item.id] = (this.stats[item.id] ?? 0) + 1;
+    if (this.firstTry) {
+      this.stats[item.id] = (this.stats[item.id] ?? 0) + 1;
+      recordWord(item.id, true, 'snake');
+    }
     writeStore(STATS_KEY, this.stats);
     this.burst(item.img.x, item.img.y);
     this.floatWord(item.id, item.img.x, item.img.y, '#ffd166');
@@ -422,6 +489,51 @@ export class SnakeScene extends Phaser.Scene {
     }
     this.items = [];
     this.showCard(item.id);
+    const yes = phrase(`snake.yes.${Math.floor(this.rng() * YES_COUNT)}` as PhraseId);
+    if (!(await this.talk(english(item.id), yes))) return;
+    await new Promise((r) => setTimeout(r, 400));
+    if (!this.sys.isActive()) return;
+    this.round++;
+    void this.startRound();
+  }
+
+  private async eatMulti(item: Item) {
+    this.items = this.items.filter((it) => it !== item);
+    this.tweens.killTweensOf(item.img);
+    this.paused = true;
+    const rules = this.mode === 'rules';
+    if (!this.need.has(item.id)) {
+      // Eaten against the rule: named, taken away, the rule said again.
+      this.run?.answer({ item: this.target, correct: false, chosen: item.id, ms: Date.now() - this.askedAt, round: this.round, skill: rules ? 'nogo' : 'phonics' });
+      this.firstTry = false;
+      this.cameras.main.shake(120, 0.003);
+      this.tweens.add({ targets: item.img, alpha: 0, scale: item.img.scale * 1.6, duration: 400, onComplete: () => item.img.destroy() });
+      this.floatWord(item.id, item.img.x, item.img.y, '#ffffff');
+      if (await this.talk(english(item.id), phrase(rules ? 'snake.rules.no' : 'snake.sounds.no'), english(this.target))) this.paused = false;
+      return;
+    }
+    this.need.delete(item.id);
+    this.grow++;
+    const slot = this.eaten.length;
+    this.eaten.push(item.id);
+    recordWord(item.id, true, 'snake');
+    this.run?.answer({ item: `${this.target}:${item.id}`, correct: true, ms: Date.now() - this.askedAt, round: this.round, skill: rules ? 'nogo' : 'phonics' });
+    this.askedAt = Date.now();
+    this.burst(item.img.x, item.img.y);
+    this.floatWord(item.id, item.img.x, item.img.y, '#ffd166');
+    this.tweens.add({
+      targets: item.img, x: this.slotX(slot), y: 46, displayWidth: 40, displayHeight: 40, angle: 0, duration: 600, ease: 'Cubic.easeInOut',
+      onComplete: () => this.slots.push(item.img),
+    });
+    if (this.need.size > 0) {
+      if (await this.talk(english(item.id), phrase('snake.rules.more'))) this.paused = false;
+      return;
+    }
+    for (const other of this.items) {
+      this.tweens.killTweensOf(other.img);
+      this.tweens.add({ targets: other.img, alpha: 0, scale: 0, duration: 300, onComplete: () => other.img.destroy() });
+    }
+    this.items = [];
     const yes = phrase(`snake.yes.${Math.floor(this.rng() * YES_COUNT)}` as PhraseId);
     if (!(await this.talk(english(item.id), yes))) return;
     await new Promise((r) => setTimeout(r, 400));
@@ -447,7 +559,8 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private win() {
-    this.run?.end({ completed: true, score: this.eaten.length });
+    this.run?.end({ completed: true, score: this.eaten.length, mode: this.mode ?? null });
+    this.run = undefined;
     this.paused = true;
     this.moving = false;
     this.target = '';
@@ -467,7 +580,7 @@ export class SnakeScene extends Phaser.Scene {
       layer.push(img, this.add.text(x, y + 72, en(id), { fontFamily: FONT, fontSize: '30px', color: '#1b4332', fontStyle: 'bold' }).setOrigin(0.5));
     });
     layer.push(button(this, W / 2 - 170, 580, 'Ещё раз', () => this.scene.restart({ mode: this.mode }), { w: 300, h: 90, color: COLORS.leaf }));
-    layer.push(button(this, W / 2 + 170, 580, 'Домой', () => this.scene.start('Menu'), { w: 300, h: 90, color: 0x6c757d }));
+    layer.push(button(this, W / 2 + 170, 580, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
     layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
     void this.talk(phrase('snake.win'));
   }

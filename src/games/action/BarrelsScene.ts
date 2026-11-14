@@ -1,8 +1,11 @@
 import Phaser from 'phaser';
-import { phrase } from '../../core/phrases';
-import { FONT, W } from '../../scenes/ui';
+import { track } from '../../core/analytics';
+import { voice } from '../../core/audio';
+import { english, join, phrase } from '../../core/phrases';
+import { recordWord } from '../../core/wordLog';
+import { button, FONT, W } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
-import { pick } from '../common/rng';
+import { int, pick, shuffle } from '../common/rng';
 import { generateBarrels, nextBarrel, type BarrelsTask } from './generators';
 import { SeaScene } from './SeaScene';
 
@@ -52,10 +55,63 @@ export class BarrelsScene extends SeaScene {
     this.add.image(W / 2, 360, 'bg-sea').setDisplaySize(W, 720);
     this.waves(380);
     this.drawHold();
-    this.spawner = this.time.addEvent({ delay: (this.b.crossSec * 1000) / 3.6, loop: true, callback: () => this.spawn() });
-    this.spawn();
     this.addParrot();
-    this.say(this.instruction());
+    const start = () => {
+      this.spawner = this.time.addEvent({ delay: (this.b.crossSec * 1000) / 3.6, loop: true, callback: () => this.spawn() });
+      this.spawn();
+      this.say(this.instruction());
+    };
+    // Warm-up up to level 4: a quick look at a flock — how many? (in English).
+    if (this.b.level <= 4) this.time.delayedCall(0, () => void this.flash().then(() => this.sys.isActive() && start()));
+    else start();
+  }
+
+  /**
+   * Subitising flash (Clements & Sarama, Building Blocks): gulls show for about
+   * a second, too short to count one by one, then "How many?" and three number
+   * cards. The answer is said in English, so numbers are practised too.
+   */
+  private async flash() {
+    this.locked = true;
+    const max = this.b.level <= 2 ? 5 : 9;
+    const n = int(this.rng, 2, max);
+    const layer: Phaser.GameObjects.GameObject[] = [this.add.rectangle(W / 2, 470, 900, 360, 0x0b2233, 0.55).setDepth(11)];
+    this.say(phrase('barrels.flash'));
+    await this.afterSpeech(300);
+    // Ten-frame layout: 5 in a row, so 6–9 read as "five and some more".
+    const gulls = Array.from({ length: n }, (_, i) =>
+      this.add.image(W / 2 - 280 + (i % 5) * 140, 400 + Math.floor(i / 5) * 130, 'gull').setDisplaySize(120, 82).setDepth(12),
+    );
+    await new Promise((r) => this.time.delayedCall(n <= 5 ? 1100 : 1500, r));
+    gulls.forEach((g) => g.destroy());
+    if (!this.sys.isActive()) return;
+    voice.say(english('q.howmany'));
+    const options = shuffle(this.rng, [n, ...shuffle(this.rng, [n - 1, n + 1, n + 2].filter((x) => x >= 1 && x <= 10)).slice(0, 2)]);
+    const t0 = Date.now();
+    const picked = await new Promise<number>((resolve) => {
+      options.forEach((v, i) => {
+        const b = button(this, W / 2 - 220 + i * 220, 470, String(v), () => resolve(v), { w: 170, h: 130, color: 0x277da1 });
+        b.setDepth(12);
+        layer.push(b);
+      });
+    });
+    const ok = picked === n;
+    track('voyage', 'answer', { item: `subitize-${n}`, correct: ok, chosen: String(picked), ms: Date.now() - t0, skill: 'subitize', level: this.b.level });
+    recordWord(`n${n}`, ok, 'barrels');
+    layer.forEach((o) => o.destroy());
+    if (!ok) {
+      // Show them again, now slowly, and count along.
+      const again = Array.from({ length: n }, (_, i) =>
+        this.add.image(W / 2 - 280 + (i % 5) * 140, 400 + Math.floor(i / 5) * 130, 'gull').setDisplaySize(120, 82).setDepth(12),
+      );
+      this.say(join(phrase('barrels.flash.count'), english(`n${n}`)));
+      await this.afterSpeech(1500);
+      again.forEach((g) => g.destroy());
+    } else {
+      this.say(join(english(`n${n}`), english('goodjob')));
+      await this.afterSpeech(500);
+    }
+    this.locked = false;
   }
 
   /**
