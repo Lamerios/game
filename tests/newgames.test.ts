@@ -1,3 +1,4 @@
+import * as CR from '../src/games/crew/logic';
 import * as SY from '../src/games/shipyard/logic';
 import * as MP from '../src/games/mappuzzle/logic';
 import { describe, expect, it } from 'vitest';
@@ -108,5 +109,27 @@ describe('shipyard', () => {
     expect(SY.checkOrder(o, ['red', null, 'red', null, null, null]).ok).toBe(true);
     expect(SY.checkOrder(o, ['red', 'blue', 'red', null, null, null]).ok).toBe(false);
     expect(SY.checkOrder(o, ['red', null, null, null, null, null]).got).toBe(1);
+  });
+});
+
+describe('crew', () => {
+  it('emotion trials always contain the answer and have voiced lines', () => {
+    for (const lvl of [1, 2])
+      for (let seed = 1; seed < 20; seed++) {
+        const ts = CR.planEmotions(lvl, mulberry32(seed));
+        expect(ts).toHaveLength(4);
+        for (const t of ts) {
+          expect(t.options).toContain(t.emo);
+          expect(new Set(t.options).size).toBe(3);
+          expect(CR.emotionsFor(lvl)).toEqual(expect.arrayContaining(t.options));
+          expect(ENGLISH[`emo.who.${t.emo}`]).toBeTruthy();
+          if (t.kind === 'situation') expect(ph[`rumb.crew.sit.${t.sit}`]).toBeTruthy();
+        }
+      }
+  });
+  it('story frames never start in order; false belief is scored', () => {
+    for (let seed = 1; seed < 30; seed++) expect(CR.shuffledFrames(mulberry32(seed))).not.toEqual([0, 1, 2]);
+    expect(CR.scoreTom('red', 'red', 'blue')).toEqual({ belief: true, reality: true });
+    expect(CR.scoreTom('red', 'blue', 'blue')).toEqual({ belief: false, reality: true });
   });
 });
