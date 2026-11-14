@@ -26,6 +26,11 @@ def spoken(text: str) -> str:
 # copy is kept, cut at its first token's start time.
 LEAD_IN = 0.03  # seconds kept before the second copy starts
 FADE = 0.012
+# The very end of a longer utterance trails off in a breathy hiss, heard as an
+# extra "s" ("bananas"). So the clip also ends shortly after the last word's
+# end time, with a soft fade-out.
+TAIL = 0.07
+FADE_OUT = 0.05
 
 
 def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
@@ -41,9 +46,15 @@ def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
         if start is not None:
             pcm = r.audio.numpy().astype(np.float32)
             i = max(0, int((start - LEAD_IN) * 24000))
-            out = pcm[i:].copy()
+            words = [t for t in tokens[half:] if any(c.isalnum() for c in t.text) and t.end_ts is not None]
+            j = len(pcm)
+            if words:
+                j = min(len(pcm), int((words[-1].end_ts + TAIL) * 24000))
+            out = pcm[i:j].copy()
             n = min(len(out), int(FADE * 24000))
             out[:n] *= np.linspace(0.0, 1.0, n, dtype=np.float32)
+            m = min(len(out), int(FADE_OUT * 24000))
+            out[len(out) - m:] *= np.linspace(1.0, 0.0, m, dtype=np.float32)
             return out
     # No timestamps: fall back to saying it once.
     print(f"  warning: no timestamps for {text!r}, said once", flush=True)
