@@ -175,3 +175,25 @@ export function englishLines(): Record<string, string> {
 }
 
 export const PRAISE_LINES = ['race.great', 'race.yes', 'race.welldone', 'goodjob'];
+
+// ---------- number line ----------
+
+/**
+ * The race is also a straight number line 0–30 (Siegler & Ramani: linear board
+ * games build the mental number line). Every right word moves the car one
+ * step; after rows 4 and 8 a booster: pick the bigger one (+2 or +3, then
+ * +3 or +5), guess where the car lands, then count the steps in English.
+ */
+export const LINE_MAX = 30;
+export const BOOST_AFTER: readonly number[] = [3, 7];
+
+export function boosterPair(after: number): [number, number] {
+  return after <= 3 ? [2, 3] : [3, 5];
+}
+
+/** Three landing places: the right one and two neighbours on the line. */
+export function landingOptions(pos: number, v: number, rng: Rng): number[] {
+  const right = Math.min(LINE_MAX, pos + v);
+  const near = shuffle(rng, [right - 2, right - 1, right + 1, right + 2].filter((x) => x > pos && x <= LINE_MAX)).slice(0, 2);
+  return shuffle(rng, [right, ...near]);
+}

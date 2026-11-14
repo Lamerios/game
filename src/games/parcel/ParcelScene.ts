@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
+import { track } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
 import { button, COLORS, FONT, H, W } from '../../scenes/ui';
 import { mulberry32, type Rng } from '../common/rng';
 import {
-  BOX_PAINT, checkLoad, choices, freshProgress, LEGS, loadId, parseProgress, planLoad, takeId, VEHICLES, WOOD,
+  BOX_PAINT, checkLoad, checkPlan, choices, freshProgress, LEGS, loadId, parseProgress, planLoad, planOptions, takeId, VEHICLES, WOOD,
   type BoxColor, type Leg, type LoadTask, type Progress, type Vehicle,
 } from './logic';
 
@@ -17,6 +18,9 @@ const PICS = ['ship', 'palm', 'cactus', 'city', 'fir', 'snowman', 'bear', 'globe
 
 /** Stops on the round route: the harbour, then where each leg arrives. */
 const STOP_PICS = ['hut', 'palm', 'cactus', 'mountain', 'city', 'temple', 'fir'];
+/** What lies on each leg, for the route plan. */
+const TERRAIN_RU: Record<Leg['terrain'], string> = { sea: 'через море', desert: 'через пустыню', mountains: 'через горы', rails: 'по рельсам', ocean: 'через океан', snow: 'по снегу' };
+
 const STOPS: { name: string; pic: string }[] = ['Гавань', ...LEGS.map((l) => l.place)].map((name, i) => ({ name, pic: STOP_PICS[i]! }));
 
 // Leg screen layout: the pier on the left, the way to go on the right, a wooden board at the bottom.
@@ -254,8 +258,81 @@ export class ParcelScene extends Phaser.Scene {
     } else if (lines.length && !(await this.talk(...lines))) {
       return;
     }
+    // From the second trip: plan the whole route before setting off.
+    if (first && leg === 0 && this.progress.trips >= 1 && !(await this.planRoute())) return;
     go.setVisible(true);
     this.tweens.add({ targets: go, scale: 1.08, yoyo: true, repeat: -1, duration: 500 });
+  }
+
+  /** The route plan: one transport per leg, then a test run that stops where the plan breaks. */
+  private async planRoute(): Promise<boolean> {
+    const layer: Phaser.GameObjects.GameObject[] = [];
+    const k = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(30);
+      layer.push(o);
+      return this.keep(o);
+    };
+    k(this.add.rectangle(W / 2, H / 2, W, H, 0x0b2233, 0.92).setInteractive());
+    k(this.add.text(W / 2, 70, 'План маршрута', { fontFamily: FONT, fontSize: '48px', color: '#ffd166' }).setOrigin(0.5));
+    const plan: (Vehicle | undefined)[] = LEGS.map(() => undefined);
+    const options = LEGS.map((leg) => planOptions(leg, this.rng));
+    const slots: Phaser.GameObjects.Container[] = [];
+    const colX = (i: number) => 130 + i * 204;
+    LEGS.forEach((leg, i) => {
+      k(this.add.circle(colX(i), 200, 62, 0xfff1d0).setStrokeStyle(5, 0x2b2d42));
+      k(this.add.image(colX(i), 196, `parcel-${STOPS[i + 1]!.pic}`).setDisplaySize(90, 90));
+      k(this.add.text(colX(i), 282, leg.place, { fontFamily: FONT, fontSize: '26px', color: '#ffffff' }).setOrigin(0.5));
+      k(this.add.text(colX(i), 316, TERRAIN_RU[leg.terrain], { fontFamily: FONT, fontSize: '22px', color: '#8ecae6' }).setOrigin(0.5));
+      if (i < LEGS.length - 1) k(this.add.text(colX(i) + 102, 200, '→', { fontFamily: FONT, fontSize: '48px', color: '#ffd166' }).setOrigin(0.5));
+      const bg = this.add.rectangle(0, 0, 170, 150, 0x1b4965).setStrokeStyle(5, 0xffd166);
+      const q = this.add.text(0, 0, '?', { fontFamily: FONT, fontSize: '80px', color: '#ffd166' }).setOrigin(0.5);
+      const slot = k(this.add.container(colX(i), 440, [bg, q]).setSize(170, 150).setInteractive({ useHandCursor: true }));
+      slot.on('pointerup', () => {
+        // Each tap shows the next transport of the three and names it in English.
+        const cur = plan[i] ? options[i]!.indexOf(plan[i]!) : -1;
+        const v = options[i]![(cur + 1) % options[i]!.length]!;
+        plan[i] = v;
+        slot.removeAll(true);
+        slot.add([this.add.rectangle(0, 0, 170, 150, 0x1b4965).setStrokeStyle(5, 0xffd166), orient(this.add.image(0, 0, `parcel-${v}`).setDisplaySize(120, 120), v)]);
+        voice.say(english(v));
+        check.setAlpha(plan.every(Boolean) ? 1 : 0.4);
+      });
+      slots.push(slot);
+    });
+    const check = k(button(this, W / 2, 610, 'Проверить план', () => void tryPlan(), { w: 420, h: 96, color: COLORS.leaf })).setAlpha(0.4);
+    let attempts = 0;
+    const t0 = Date.now();
+    let resolveDone!: (ok: boolean) => void;
+    const done = new Promise<boolean>((r) => (resolveDone = r));
+    const parcel = k(this.add.image(colX(0) - 90, 350, 'parcel-package').setDisplaySize(60, 60));
+    let checking = false;
+    const tryPlan = async () => {
+      if (checking || !plan.every(Boolean)) return;
+      checking = true;
+      attempts++;
+      const bad = checkPlan(plan);
+      // The parcel travels along the plan and stops where it breaks.
+      const stop = bad < 0 ? LEGS.length - 1 : bad;
+      parcel.setPosition(colX(0) - 90, 350);
+      for (let i = 0; i <= stop; i++) {
+        await new Promise((r) => this.tweens.add({ targets: parcel, x: colX(i), duration: 450, onComplete: r }));
+        if (!this.sys.isActive()) return resolveDone(false);
+      }
+      track('parcel', 'answer', { item: 'route-plan', correct: bad < 0, chosen: bad < 0 ? 'ok' : `leg${bad}-${plan[bad]}`, attempt: attempts, skill: 'planning' });
+      if (bad >= 0) {
+        this.tweens.add({ targets: slots[bad], angle: 8, yoyo: true, repeat: 3, duration: 90 });
+        (slots[bad]!.list[0] as Phaser.GameObjects.Rectangle).setStrokeStyle(6, 0xe63946);
+        checking = false;
+        await this.talk(phrase('rumb.parcel.plan.fix'));
+        return;
+      }
+      track('parcel', 'plan_done', { attempts, ms: Date.now() - t0 });
+      await this.talk(phrase('rumb.parcel.plan.ok'));
+      layer.forEach((o) => o.destroy());
+      resolveDone(this.sys.isActive());
+    };
+    if (!(await this.talk(phrase('rumb.parcel.plan')))) return false;
+    return done;
   }
 
   private drawStamps(done: number) {

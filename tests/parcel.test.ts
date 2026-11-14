@@ -77,3 +77,21 @@ describe('parcel', () => {
     expect(parseProgress({ leg: 99, trips: -1 })).toEqual({ leg: 0, trips: 0 });
   });
 });
+
+describe('parcel route plan', () => {
+  it('offers the right transport among three and finds the first broken leg', async () => {
+    const { planOptions, checkPlan, LEGS } = await import('../src/games/parcel/logic');
+    const { mulberry32 } = await import('../src/games/common/rng');
+    const rng = mulberry32(3);
+    for (const leg of LEGS) {
+      const o = planOptions(leg, rng);
+      expect(o).toHaveLength(3);
+      expect(o).toContain(leg.answer);
+      expect(new Set(o).size).toBe(3);
+    }
+    const good = LEGS.map((l) => l.answer);
+    expect(checkPlan(good)).toBe(-1);
+    expect(checkPlan(good.map((v, i) => (i === 3 ? 'boat' : v)))).toBe(3);
+    expect(checkPlan([])).toBe(0);
+  });
+});

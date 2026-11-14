@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
+import { track } from '../../core/analytics';
 import { voice } from '../../core/audio';
+import { recordWord } from '../../core/wordLog';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
 import { button, FONT, H, W } from '../../scenes/ui';
@@ -10,7 +12,7 @@ import {
   WRENCH, type Palette,
 } from './art';
 import {
-  carLine, CARS, CRASHES_TO_PIT, freshProgress, parseProgress, PIT_MS, planRace, PRAISE_LINES, recordRace, ROWS_PER_RACE, SQUATS, starsFor,
+  BOOST_AFTER, boosterPair, carLine, CARS, CRASHES_TO_PIT, landingOptions, LINE_MAX, freshProgress, parseProgress, PIT_MS, planRace, PRAISE_LINES, recordRace, ROWS_PER_RACE, SQUATS, starsFor,
   TRACKS, unlocked, type CarId, type Progress, type Row, type Track,
 } from './logic';
 
@@ -126,6 +128,10 @@ export class RaceScene extends Phaser.Scene {
   private nextHouse = 0;
   private nextProp = 0;
   private correct = 0;
+  /** Where the car is on the number line 0–LINE_MAX. */
+  private linePos = 0;
+  private lineCar?: Phaser.GameObjects.Container;
+  private lineText?: Phaser.GameObjects.Text;
   private results: (boolean | undefined)[] = [];
   private crashes = 0;
   private sincePit = 0;
@@ -440,6 +446,7 @@ export class RaceScene extends Phaser.Scene {
     this.nextHouse = -2;
     this.nextProp = 0;
     this.correct = 0;
+    this.linePos = 0;
     this.results = this.rows.map(() => undefined);
     this.crashes = 0;
     this.sincePit = 0;
@@ -501,6 +508,7 @@ export class RaceScene extends Phaser.Scene {
     icon.fillStyle(0xffffff).fillRect(-18, -9, 11, 18).fillTriangle(-8, -9, 8, -22, 8, 22).fillTriangle(-8, 9, 8, -22, 8, 22);
     icon.lineStyle(4, 0xffffff).beginPath().arc(11, 0, 10, -0.9, 0.9).strokePath().beginPath().arc(11, 0, 19, -0.9, 0.9).strokePath();
     listen.add(icon);
+    this.drawNumberLine();
     // speedometer
     const sp = this.keep(this.add.graphics({ x: 1180, y: 190 }).setDepth(3000));
     sp.fillStyle(0x14213d, 0.85).fillCircle(0, 0, 76).lineStyle(6, 0xffffff).strokeCircle(0, 0, 76);
@@ -511,6 +519,77 @@ export class RaceScene extends Phaser.Scene {
     this.needle = this.keep(this.add.graphics({ x: 1180, y: 190 }).setDepth(3001));
     this.kmh = this.keep(this.add.text(1180, 232, '0', { fontFamily: FONT, fontSize: '28px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5).setDepth(3002));
     this.keep(this.add.text(1180, 258, 'км/ч', { fontFamily: FONT, fontSize: '16px', color: '#ffffff' }).setOrigin(0.5).setDepth(3002));
+  }
+
+  private lineX(n: number) {
+    return 390 + (n / LINE_MAX) * 540;
+  }
+
+  /** A straight number line 0–30 under the word dots: right words move the car along it. */
+  private drawNumberLine() {
+    const g = this.keep(this.add.graphics().setDepth(3000));
+    g.fillStyle(0x14213d, 0.7).fillRoundedRect(360, 76, 600, 58, 20);
+    g.lineStyle(4, 0xffffff).lineBetween(this.lineX(0), 96, this.lineX(LINE_MAX), 96);
+    for (let n = 0; n <= LINE_MAX; n++) {
+      const big = n % 5 === 0;
+      g.lineStyle(big ? 4 : 2, 0xffffff, big ? 1 : 0.6).lineBetween(this.lineX(n), big ? 87 : 90, this.lineX(n), big ? 105 : 102);
+      if (big) this.keep(this.add.text(this.lineX(n), 120, String(n), { fontFamily: FONT, fontSize: '17px', color: '#ffd166' }).setOrigin(0.5).setDepth(3001));
+    }
+    const dot = this.add.circle(0, 0, 11, 0xe63946).setStrokeStyle(3, 0xffffff);
+    this.lineText = this.add.text(0, -21, '0', { fontFamily: FONT, fontSize: '20px', color: '#ffffff', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 5 }).setOrigin(0.5);
+    this.lineCar = this.keep(this.add.container(this.lineX(0), 96, [dot, this.lineText]).setDepth(3002));
+  }
+
+  private stepLine(n: number) {
+    this.linePos = Math.min(LINE_MAX, n);
+    this.lineText?.setText(String(this.linePos));
+    if (this.lineCar) this.tweens.add({ targets: this.lineCar, x: this.lineX(this.linePos), duration: 260, ease: 'Quad.easeOut' });
+  }
+
+  /** Booster: pick the bigger one, guess where it lands, then count the steps aloud in English. */
+  private async booster(after: number, run: number): Promise<boolean> {
+    const ok = () => run === this.run && this.sys.isActive();
+    const [a, b] = boosterPair(after);
+    const layer: Phaser.GameObjects.GameObject[] = [];
+    const d = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(3200);
+      layer.push(o);
+      return o;
+    };
+    d(this.add.rectangle(W / 2, 420, 760, 300, 0x14213d, 0.9).setStrokeStyle(5, 0xffd166));
+    const title = d(this.add.text(W / 2, 315, 'Бустер! Какой больше?', { fontFamily: FONT, fontSize: '36px', color: '#ffd166' }).setOrigin(0.5));
+    const choose = <T,>(opts: { label: string; v: T; color: number }[], y: number) =>
+      new Promise<T>((resolve) => {
+        const btns = opts.map((o, i) => d(button(this, W / 2 + (i - (opts.length - 1) / 2) * 230, y, o.label, () => {
+          btns.forEach((x) => x.destroy());
+          resolve(o.v);
+        }, { w: 200, h: 110, color: o.color })));
+      });
+    const t0 = Date.now();
+    void this.talk(this.ru('raccoon.race.boost'));
+    const opts = this.rng() < 0.5 ? [a, b] : [b, a];
+    const v = await choose(opts.map((x) => ({ label: `+${x}`, v: x, color: 0xe76f51 })), 420);
+    if (!ok()) return false;
+    track('race', 'answer', { item: `boost-${a}-${b}`, correct: v === Math.max(a, b), chosen: String(v), ms: Date.now() - t0, skill: 'compare' });
+    if (v !== Math.max(a, b) && !(await this.talk(this.ru('raccoon.race.boost.small')))) return false;
+    const t1 = Date.now();
+    title.setText(`Мы на ${this.linePos}, едем +${v}. Куда приедем?`);
+    void this.talk(this.ru('raccoon.race.where'));
+    const landing = landingOptions(this.linePos, v, this.rng);
+    const guess = await choose(landing.map((x) => ({ label: String(x), v: x, color: 0x277da1 })), 420);
+    if (!ok()) return false;
+    const right = Math.min(LINE_MAX, this.linePos + v);
+    track('race', 'answer', { item: `land-${this.linePos}+${v}`, correct: guess === right, chosen: String(guess), ms: Date.now() - t1, skill: 'number_line' });
+    title.setText(`${this.linePos} + ${v} = ${right}`);
+    // Count on, one step per number, in English.
+    for (let n = this.linePos + 1; n <= right; n++) {
+      this.stepLine(n);
+      this.beep([440 + n * 12], 0.08);
+      voice.say(english(`n${n}`));
+      if (!(await this.wait(750, run))) return false;
+    }
+    layer.forEach((o) => o.destroy());
+    return this.talk(guess === right ? this.ru('raccoon.race.where.yes') : this.ru('raccoon.race.where.no'));
   }
 
   /** On-screen controls: lane arrows on the left, pedals on the right; swipes work too. */
@@ -659,9 +738,12 @@ export class RaceScene extends Phaser.Scene {
       if (res.ok) {
         this.correct++;
         this.hits.push(row.target);
+        this.stepLine(this.linePos + 1);
+        recordWord(row.target, true, 'race');
         if (!(await this.talk(english(row.target), english(pick(this.rng, PRAISE_LINES))))) return;
       } else {
         this.missed.push(row.target);
+        recordWord(row.target, false, 'race');
         const line = this.ru(`raccoon.race.crash.${Math.floor(this.rng() * 3)}`);
         if (!(await this.talk(line, english(res.word), this.ru('raccoon.race.need'), english(row.target)))) return;
       }
@@ -675,6 +757,7 @@ export class RaceScene extends Phaser.Scene {
         if (!(await this.talk(this.ru('raccoon.race.warn')))) return;
       }
       this.cue = undefined;
+      if (BOOST_AFTER.includes(i) && i < this.rows.length - 1 && !(await this.booster(i, run))) return;
     }
     // finish line
     this.addThing({ s: this.pos + 30, x: 0, w: this.roadHalf * 2 + 0.6, kind: 'arch', key: 'race-arch' });

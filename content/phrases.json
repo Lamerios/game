@@ -320,7 +320,15 @@
     "snake.rules.no": "+Эту карт+инку н+ельзя! Сл+ушай пр+авило.",
     "snake.rules.more": "Ещё од+ну!",
     "snake.sounds.intro": "Сл+ушай, как начин+ается сл+ово. Найд+и карт+инку, кот+орая начин+ается так же!",
-    "snake.sounds.no": "Нет, +это сл+ово начин+ается по-друг+ому."
+    "snake.sounds.no": "Нет, +это сл+ово начин+ается по-друг+ому.",
+    "raccoon.race.boost": "Б+устер! Как+ой даст б+ольше?",
+    "raccoon.race.boost.small": "+Этот м+еньше. Но всё равн+о поех+али!",
+    "raccoon.race.where": "Куд+а мы при+едем на числ+овой пр+ямой?",
+    "raccoon.race.where.yes": "Т+очно! Ты угад+ал, куд+а при+едем!",
+    "raccoon.race.where.no": "Вот куд+а мы при+ехали. Счит+ай шаг+и — и б+удешь знать з+аранее!",
+    "rumb.parcel.plan": "Втор+ая кругосв+етка! Тепер+ь сост+авим план зар+анее: как+ой тр+анспорт н+ужен на к+аждом уч+астке? Нажим+ай на кл+етки.",
+    "rumb.parcel.plan.fix": "Стоп! Здесь +этот тр+анспорт не пр+оедет. Испр+авь план!",
+    "rumb.parcel.plan.ok": "План г+одный! Поех+али!"
   },
   "numbers": {
     "nom": [
@@ -922,7 +930,16 @@
       "starts.moon": "Find a word that starts like moon!",
       "starts.pig": "Find a word that starts like pig!",
       "starts.sun": "Find a word that starts like sun!",
-      "starts.tree": "Find a word that starts like tree!"
+      "starts.tree": "Find a word that starts like tree!",
+      "n21": "twenty-one",
+      "n22": "twenty-two",
+      "n23": "twenty-three",
+      "n24": "twenty-four",
+      "n25": "twenty-five",
+      "n26": "twenty-six",
+      "n27": "twenty-seven",
+      "n28": "twenty-eight",
+      "n29": "twenty-nine"
     }
   }
 }
