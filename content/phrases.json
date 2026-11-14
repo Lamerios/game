@@ -328,7 +328,16 @@
     "raccoon.race.where.no": "Вот куд+а мы при+ехали. Счит+ай шаг+и — и б+удешь знать з+аранее!",
     "rumb.parcel.plan": "Втор+ая кругосв+етка! Тепер+ь сост+авим план зар+анее: как+ой тр+анспорт н+ужен на к+аждом уч+астке? Нажим+ай на кл+етки.",
     "rumb.parcel.plan.fix": "Стоп! Здесь +этот тр+анспорт не пр+оедет. Испр+авь план!",
-    "rumb.parcel.plan.ok": "План г+одный! Поех+али!"
+    "rumb.parcel.plan.ok": "План г+одный! Поех+али!",
+    "rumb.anchor.hello": "Капит+ан наз+ывает глубин+у по-англ+ийски. Найд+и +это м+есто на л+енте и нажм+и — там бр+осим +якорь!",
+    "rumb.anchor.again": "Бр+осим +якорь! Сл+ушай глубин+у.",
+    "rumb.anchor.exact": "Т+очно в цель!",
+    "rumb.anchor.close": "Совс+ем бл+изко!",
+    "rumb.anchor.far": "Посмотр+и, где +это ч+исло на с+амом д+еле.",
+    "rumb.anchor.more": "Н+ужно б+ыло д+альше, бл+иже к конц+у.",
+    "rumb.anchor.less": "Н+ужно б+ыло бл+иже к нул+ю.",
+    "rumb.anchor.end": "Ты ч+увствуешь ч+исла всё л+учше!",
+    "rumb.anchor.levelup": "Сл+едующая л+ента б+удет длинн+ее!"
   },
   "numbers": {
     "nom": [
@@ -939,7 +948,15 @@
       "n26": "twenty-six",
       "n27": "twenty-seven",
       "n28": "twenty-eight",
-      "n29": "twenty-nine"
+      "n29": "twenty-nine",
+      "anchor.drop": "Drop the anchor at",
+      "n35": "thirty-five",
+      "n45": "forty-five",
+      "n55": "fifty-five",
+      "n65": "sixty-five",
+      "n75": "seventy-five",
+      "n85": "eighty-five",
+      "n95": "ninety-five"
     }
   }
 }
