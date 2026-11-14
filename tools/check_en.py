@@ -2,7 +2,7 @@
 
   python tools/check_en.py <audio dir> content/phrases.json [label]
 
-Flags a clip when the words heard differ from the text, above all an extra
+Flags a clip when the words heard differ from the text (plural "s" too), above all an extra
 "a / an / the" in front. Uses faster-whisper (base.en). Never fails the build:
 recognition can be wrong too, so this is a report to read.
 """
