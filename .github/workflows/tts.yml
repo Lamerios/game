@@ -13,7 +13,6 @@ on:
       - src/games/snake/logic.ts
       - tools/tts.ts
       - tools/kokoro_tts.py
-      - tools/check_en.py
       - .github/workflows/tts.yml
   workflow_dispatch:
     inputs:
@@ -62,11 +61,6 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y -q espeak-ng ffmpeg
           pip install -q torch --index-url https://download.pytorch.org/whl/cpu
           pip install -q "kokoro>=0.9.4" soundfile
-          pip install -q faster-whisper
-      - name: Listen to English clips (before)
-        if: steps.key.outputs.ok == 'true' && steps.needs.outputs.kokoro != '0'
-        continue-on-error: true
-        run: python tools/check_en.py public/audio content/phrases.json before
       - run: npm run tts
         if: steps.key.outputs.ok == 'true'
         env:
@@ -74,10 +68,6 @@ jobs:
           TTS_VOICE: ${{ inputs.voice || 'alena' }}
           TTS_EMOTION: ${{ github.event_name == 'workflow_dispatch' && inputs.emotion || 'good' }}
           TTS_SPEED: ${{ inputs.speed || '0.9' }}
-      - name: Listen to English clips (after)
-        if: steps.key.outputs.ok == 'true' && steps.needs.outputs.kokoro != '0'
-        continue-on-error: true
-        run: python tools/check_en.py public/audio content/phrases.json after
       - name: Commit audio
         if: steps.key.outputs.ok == 'true'
         run: |

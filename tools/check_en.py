@@ -1,6 +1,6 @@
 """Listens to the English clips with speech recognition and reports what it hears.
 
-  python tools/check_en.py public/audio content/phrases.json [label]
+  python tools/check_en.py <audio dir> content/phrases.json [label]
 
 Flags a clip when the words heard differ from the text, above all an extra
 "a / an / the" in front. Uses faster-whisper (base.en). Never fails the build:
@@ -8,9 +8,11 @@ recognition can be wrong too, so this is a report to read.
 """
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 from faster_whisper import WhisperModel
 
 NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
@@ -35,6 +37,13 @@ def variants(text: str) -> set[str]:
     return out
 
 
+def load(f: Path) -> np.ndarray:
+    """16 kHz mono float32 via ffmpeg (faster-whisper's own decoder depends on a PyAV version)."""
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(f), "-f", "s16le", "-ac", "1", "-ar", "16000", "-"],
+                         check=True, capture_output=True).stdout
+    return np.frombuffer(raw, np.int16).astype(np.float32) / 32768.0
+
+
 def main() -> None:
     audio, phrases = Path(sys.argv[1]), json.load(open(sys.argv[2], encoding="utf-8"))
     label = sys.argv[3] if len(sys.argv) > 3 else ""
@@ -45,7 +54,7 @@ def main() -> None:
         f = audio / f"en.{wid}.mp3"
         if not f.exists():
             continue
-        segs, _ = model.transcribe(str(f), language="en", beam_size=5, temperature=0, condition_on_previous_text=False, vad_filter=False)
+        segs, _ = model.transcribe(load(f), language="en", beam_size=5, temperature=0, condition_on_previous_text=False, vad_filter=False)
         heard = norm(" ".join(s.text for s in segs))
         if heard in variants(text):
             continue

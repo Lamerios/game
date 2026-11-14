@@ -1,0 +1,30 @@
+name: Listen to English clips
+# Speech recognition (faster-whisper) over the English clips, old ones vs current ones.
+# A report to read, never a failing check: it flags clips heard with an extra "a / an / the" in front.
+on:
+  push:
+    paths:
+      - tools/check_en.py
+      - .github/workflows/en-check.yml
+  workflow_dispatch:
+    inputs:
+      old:
+        description: 'Commit with the old clips to compare against'
+        default: '5f60584'
+jobs:
+  listen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+          pip install -q faster-whisper numpy
+      - name: Old clips
+        run: |
+          mkdir -p /tmp/old && git archive "${{ inputs.old || '5f60584' }}" public/audio | tar -x -C /tmp/old
+          python tools/check_en.py /tmp/old/public/audio content/phrases.json before
+      - name: Current clips
+        run: python tools/check_en.py public/audio content/phrases.json after
