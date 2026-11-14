@@ -250,7 +250,28 @@
     "rumb.parcel.final.3": "Тут мед+аль «Кругосв+етный капит+ан»! И гл+обус, чт+обы п+омнить наш путь.",
     "magpie.final": "Кар... А мне блест+яшку?",
     "rumb.parcel.final.4": "Держ+и, Трещ+отка, блест+ящую м+арку. Теп+ерь ты с н+ами!",
-    "magpie.thanks": "Кар! Спас+ибо! Я б+ольше не б+уду!"
+    "magpie.thanks": "Кар! Спас+ибо! Я б+ольше не б+уду!",
+    "raccoon.race.hello": "{name}, прив+ет! Я Б+олтик, мех+аник г+оночной ком+анды. Выбир+ай маш+ину и тр+ассу!",
+    "raccoon.race.rules": "Я скаж+у сл+ово по-англ+ийски, а ты въезж+ай в пр+авильную карт+инку! Стр+елки вл+ево и впр+аво — перестр+оиться. Вперёд — газ, наз+ад — т+ормоз.",
+    "raccoon.race.locked": "+Эта тр+асса пок+а закр+ыта. Получ+и хот+я бы одн+у звезд+у на пр+ошлой!",
+    "raccoon.race.start.0": "+Утренний г+ород! Сл+ушай слов+а вним+ательно.",
+    "raccoon.race.start.1": "Ш+оссе на зак+ате! Тут к+онусы на дор+оге, объезж+ай их. И карт+инки пох+ожие!",
+    "raccoon.race.start.2": "Н+очные огн+и! Чет+ыре пол+осы, и ещё ч+исла по-англ+ийски. Ты спр+авишься, {name}!",
+    "raccoon.race.crash.0": "Бам! Ав+ария! +Это б+ыло не то сл+ово:",
+    "raccoon.race.crash.1": "Ой, {name}! Не т+уда. Там б+ыло:",
+    "raccoon.race.crash.2": "Бум! Мим+о! Там б+ыло:",
+    "raccoon.race.need": "А н+ужно б+ыло:",
+    "raccoon.race.cone": "Ой, к+онус! Объезж+ай их стр+елками.",
+    "raccoon.race.warn": "Ещё одн+а ав+ария, и пит-ст+оп!",
+    "raccoon.race.pit.0": "Три ав+арии! Маш+ине н+ужен рем+онт. Пит-ст+оп!",
+    "raccoon.race.pit.1": "Пок+а я чин+ю маш+ину, сд+елай д+есять прис+еданий! Прис+ел — жми кн+опку, а я посч+итаю по-англ+ийски.",
+    "raccoon.race.pit.ten": "Молод+ец, {name}! Д+есять прис+еданий! Подожд+и, я ещё чин+ю.",
+    "raccoon.race.pit.done": "Маш+ина как н+овая! Поех+али д+альше!",
+    "raccoon.race.finish.0": "Ф+иниш! Звёзд пок+а нет. Попр+обуем ещё раз, {name}?",
+    "raccoon.race.finish.1": "Ф+иниш! Одн+а звезд+а. Хор+оший старт, {name}!",
+    "raccoon.race.finish.2": "Ф+иниш! Две звезд+ы! Отл+ично, {name}!",
+    "raccoon.race.finish.3": "Ф+иниш! Три звезд+ы! Ты насто+ящий г+онщик, {name}!",
+    "raccoon.race.unlock": "Откр+ылась н+овая тр+асса!"
   },
   "numbers": {
     "nom": [
@@ -728,7 +749,17 @@
       "load.5.blue": "Load five blue boxes!",
       "load.5.green": "Load five green boxes!",
       "load.5.yellow": "Load five yellow boxes!",
-      "goodjob": "Good job!"
+      "goodjob": "Good job!",
+      "car.red": "The red car!",
+      "car.blue": "The blue car!",
+      "car.yellow": "The yellow car!",
+      "car.green": "The green car!",
+      "race.go": "Go!",
+      "race.great": "Great!",
+      "race.yes": "Yes!",
+      "race.welldone": "Well done!",
+      "race.finish": "Finish!",
+      "race.squat": "Squat!"
     }
   }
 }
