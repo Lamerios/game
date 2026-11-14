@@ -18,6 +18,10 @@ import { NightScene } from './scenes/NightScene';
 import { StoryScene } from './scenes/StoryScene';
 import { LockScene } from './scenes/LockScene';
 import { WordStatsScene } from './scenes/WordStatsScene';
+import { MenuScene } from './scenes/MenuScene';
+import { analytics, startAppTracking } from './core/analytics';
+import { voice } from './core/audio';
+import { BUILD } from './parent/dashboard';
 import { COLORS, H, W } from './scenes/ui';
 
 const game = new Phaser.Game({
@@ -28,8 +32,18 @@ const game = new Phaser.Game({
   backgroundColor: COLORS.night,
   antialias: true,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, HarborScene, MapScene, IslandScene, CourseScene, NoteScene, HoldScene, ChessScene, PuzzleScene, BarrelsScene, GullsScene, BuoysScene, NightScene, StoryScene, LockScene, SnakeScene, ParcelScene, RaceScene, WordStatsScene],
+  scene: [BootScene, MenuScene, HarborScene, MapScene, IslandScene, CourseScene, NoteScene, HoldScene, ChessScene, PuzzleScene, BarrelsScene, GullsScene, BuoysScene, NightScene, StoryScene, LockScene, SnakeScene, ParcelScene, RaceScene, WordStatsScene],
 });
+
+// Event log for the parent dashboard (local only). A line said by the browser voice
+// instead of a recorded clip is logged once per clip, to find gaps in the voice-over.
+startAppTracking(BUILD);
+const fellBack = new Set<string>();
+voice.onFallback = (clip, reason) => {
+  if (fellBack.has(clip)) return;
+  fellBack.add(clip);
+  analytics.log('app', 'voice.fallback', { clip, reason });
+};
 
 // Dev-only handle for automated play-through tests.
 if (import.meta.env.DEV) (window as unknown as { __game: Phaser.Game }).__game = game;

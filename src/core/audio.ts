@@ -26,7 +26,15 @@ export class Voice {
   private ended: Promise<void> = Promise.resolve();
   private endLine?: () => void;
 
+  /** Told when a line goes to the browser voice instead of clips (analytics: voice quality). */
+  onFallback?: (clip: string, reason: 'no_clip' | 'no_audio' | 'load_failed') => void;
+
   constructor(private readonly base = import.meta.env.BASE_URL) {}
+
+  private fellBack(u: Utterance, reason: 'no_clip' | 'no_audio' | 'load_failed') {
+    const missing = this.voicedSegs(u).find((s) => !s.voiced || this.clips[s.id] === undefined) ?? u.segs[0];
+    this.onFallback?.(missing?.id || 'free-text', reason);
+  }
 
   /** Loads the clip list. Safe to skip: without it everything is spoken by the browser. */
   async init(): Promise<void> {
@@ -68,11 +76,14 @@ export class Voice {
       if (token === this.token) this.endLine?.();
     };
     if (!this.ctx || !this.hasClips(utt)) {
+      this.fellBack(utt, this.ctx ? 'no_clip' : 'no_audio');
       this.speakWeb(utt, done);
       return;
     }
     this.playClips(this.voicedSegs(utt), token, done).catch(() => {
-      if (token === this.token) this.speakWeb(utt, done);
+      if (token !== this.token) return;
+      this.fellBack(utt, 'load_failed');
+      this.speakWeb(utt, done);
     });
   }
 

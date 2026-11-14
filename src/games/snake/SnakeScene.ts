@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
@@ -106,6 +107,7 @@ export class SnakeScene extends Phaser.Scene {
   private firstTry = true;
   /** Wrong pictures eaten while the current word was asked, for the parent statistics. */
   private wrongPicks: string[] = [];
+  private run?: Run;
   private eaten: string[] = [];
   private talking = false;
   private talkToken = 0;
@@ -189,6 +191,7 @@ export class SnakeScene extends Phaser.Scene {
   private begin(mode: Mode) {
     this.mode = mode;
     this.words = planGame(mode, this.stats, ROUNDS, this.rng);
+    this.run = startRun('snake', { mode, words: this.words.length });
     void this.startRound();
   }
 
@@ -217,7 +220,7 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private drawPanel() {
-    button(this, 1170, 46, 'Домой', () => this.scene.start('Harbor'), { w: 170, h: 64, color: 0x6c757d });
+    button(this, 1170, 46, 'Домой', () => this.scene.start('Menu'), { w: 170, h: 64, color: 0x6c757d });
     const listen = button(this, 1080, 160, '     Ещё раз', () => this.repeatWord(), { w: 340, h: 100, color: COLORS.leaf });
     const icon = this.add.graphics({ x: -110, y: 0 });
     icon.fillStyle(0xffffff).fillRect(-22, -12, 14, 24).fillTriangle(-10, -12, 10, -28, 10, 28).fillTriangle(-10, 12, 10, -28, 10, 28);
@@ -343,6 +346,7 @@ export class SnakeScene extends Phaser.Scene {
   private repeatWord() {
     if (this.talking || !this.target) return;
     this.lastSpoken = this.time.now;
+    this.run?.event('repeat', { item: this.target });
     voice.say(english(this.target));
   }
 
@@ -376,7 +380,10 @@ export class SnakeScene extends Phaser.Scene {
       }
     }
     lines.push(english(this.target));
-    if (await this.talk(...lines)) this.paused = false;
+    if (await this.talk(...lines)) {
+      this.paused = false;
+      this.run?.ask(this.target, { round: this.round, options: ids.length });
+    }
   }
 
   private step() {
@@ -395,6 +402,7 @@ export class SnakeScene extends Phaser.Scene {
     this.items = this.items.filter((it) => it !== item);
     this.tweens.killTweensOf(item.img);
     this.paused = true;
+    this.run?.answer({ item: this.target, correct: item.id === this.target, chosen: item.id === this.target ? undefined : item.id, round: this.round });
     if (item.id !== this.target) {
       this.firstTry = false;
       this.wrongPicks.push(item.id);
@@ -448,6 +456,7 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private win() {
+    this.run?.end({ completed: true, score: this.eaten.length });
     this.paused = true;
     this.moving = false;
     this.target = '';
@@ -467,7 +476,7 @@ export class SnakeScene extends Phaser.Scene {
       layer.push(img, this.add.text(x, y + 72, en(id), { fontFamily: FONT, fontSize: '30px', color: '#1b4332', fontStyle: 'bold' }).setOrigin(0.5));
     });
     layer.push(button(this, W / 2 - 170, 580, 'Ещё раз', () => this.scene.restart({ mode: this.mode }), { w: 300, h: 90, color: COLORS.leaf }));
-    layer.push(button(this, W / 2 + 170, 580, 'Домой', () => this.scene.start('Harbor'), { w: 300, h: 90, color: 0x6c757d }));
+    layer.push(button(this, W / 2 + 170, 580, 'Домой', () => this.scene.start('Menu'), { w: 300, h: 90, color: 0x6c757d }));
     layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
     void this.talk(phrase('snake.win'));
   }

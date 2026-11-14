@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { track } from '../core/analytics';
 import type { GameState } from '../game-state';
 import { INTRO, strelkaParts } from '../story/script';
 import { button, FONT, H, W } from './ui';
@@ -40,6 +41,7 @@ export class HarborScene extends Phaser.Scene {
     if (!state.gate().allowed) {
       items.push(
         button(this, W / 2, H / 2 - 65, 'Ещё одно плавание', () => {
+          track('voyage', 'parent.grant');
           close();
           void state.grantSession().then(() => this.scene.restart());
         }, { w: 520, h: 70 }),
@@ -91,6 +93,7 @@ export class HarborScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const gate = state.gate();
+    track('voyage', 'harbor.open', { allowed: gate.allowed, reason: gate.allowed ? undefined : gate.reason, episode: state.episode });
     if (gate.allowed) {
       button(this, 980, 330, 'В море!', () => this.scene.start('Map'), { w: 380 });
     } else {
@@ -102,15 +105,11 @@ export class HarborScene extends Phaser.Scene {
         .text(980, 330, msg, { fontFamily: FONT, fontSize: '40px', color: '#ffffff', backgroundColor: '#1b4965', padding: { x: 16, y: 10 } })
         .setOrigin(0.5);
     }
-    // The English snake is a separate game, outside the voyage and its session limits.
-    const snake = button(this, 835, 200, '     Змейка', () => this.scene.start('Snake'), { w: 280, h: 90, color: 0x40916c });
-    snake.add(this.add.text(-90, 0, 'ABC', { fontFamily: FONT, fontSize: '30px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5));
-    // «Кругосветная посылка»: transport and English, also outside the voyage.
-    const parcel = button(this, 1125, 200, '     Посылка', () => this.scene.start('Parcel'), { w: 280, h: 90, color: 0x277da1 });
-    parcel.add(this.add.text(-96, 0, 'ABC', { fontFamily: FONT, fontSize: '30px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5));
-    // «Гонка слов»: race cars and English words, also outside the voyage.
-    const race = button(this, 230, 200, '     Гонка', () => this.scene.start('Race'), { w: 280, h: 90, color: 0xe63946 });
-    race.add(this.add.text(-90, 0, 'ABC', { fontFamily: FONT, fontSize: '30px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5));
+    // Back to the main menu with all the games.
+    button(this, 110, 50, 'Меню', () => {
+      state.leaveVoyage();
+      this.scene.start('Menu');
+    }, { w: 180, h: 70, color: 0x6c757d });
     this.add
       .text(W - 20, H - 20, 'Для родителей', { fontFamily: FONT, fontSize: '24px', color: '#ffffff', backgroundColor: '#0b2233', padding: { x: 12, y: 8 } })
       .setOrigin(1)
