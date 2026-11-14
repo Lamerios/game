@@ -309,7 +309,18 @@
     "rumb.logbook.choice": "М+ожно взять одн+у мон+ету сейч+ас. А м+ожно подожд+ать: +если повтор+ишь все слов+а, получ+ишь сунд+ук с трем+я мон+етами!",
     "rumb.logbook.coin": "Вот тво+я мон+ета.",
     "rumb.logbook.chest": "Ты дожд+ался! Вот тво+й сунд+ук.",
-    "rumb.logbook.end": "Журн+ал зап+олнен! Слов+а верн+утся в н+ужный день."
+    "rumb.logbook.end": "Журн+ал зап+олнен! Слов+а верн+утся в н+ужный день.",
+    "barrels.flash": "Смотр+и вним+ательно! Сейч+ас пролет+ят ч+айки. Ск+олько их?",
+    "barrels.flash.count": "Посчит+аем вм+есте. Ч+аек б+ыло",
+    "buoys.error": "В +этом ряд+у Кл+якса подмен+ил од+ин буй. Найд+и ош+ибку и нажм+и на нег+о!",
+    "buoys.error.found": "Нашёл! Тепер+ь лов+и пр+авильный буй.",
+    "buoys.error.hint": "Наз+ови бу+и по пор+ядку. Где пр+авило лом+ается?",
+    "snake.rules.intro": "Тепер+ь Ш+уша ест т+олько то, что разреш+ит пр+авило. Сл+ушай пр+авило!",
+    "snake.rules.switch": "Вним+ание! Пр+авило помен+ялось!",
+    "snake.rules.no": "+Эту карт+инку н+ельзя! Сл+ушай пр+авило.",
+    "snake.rules.more": "Ещё од+ну!",
+    "snake.sounds.intro": "Сл+ушай, как начин+ается сл+ово. Найд+и карт+инку, кот+орая начин+ается так же!",
+    "snake.sounds.no": "Нет, +это сл+ово начин+ается по-друг+ому."
   },
   "numbers": {
     "nom": [
@@ -895,7 +906,23 @@
       "cmd.stand": "Stand up!",
       "cmd.turn": "Turn around!",
       "cmd.wave": "Wave your hand!",
-      "cmd.storm": "Storm! Sway like a ship!"
+      "cmd.storm": "Storm! Sway like a ship!",
+      "q.howmany": "How many?",
+      "rule.animal": "Only animals!",
+      "rule.fruit": "Only fruit!",
+      "rule.vegetable": "Only vegetables!",
+      "rule.transport": "Only transport!",
+      "rule.clothes": "Only clothes!",
+      "rule.toy": "Only toys!",
+      "starts.ball": "Find a word that starts like ball!",
+      "starts.cat": "Find a word that starts like cat!",
+      "starts.dog": "Find a word that starts like dog!",
+      "starts.fish": "Find a word that starts like fish!",
+      "starts.house": "Find a word that starts like house!",
+      "starts.moon": "Find a word that starts like moon!",
+      "starts.pig": "Find a word that starts like pig!",
+      "starts.sun": "Find a word that starts like sun!",
+      "starts.tree": "Find a word that starts like tree!"
     }
   }
 }

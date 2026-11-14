@@ -171,6 +171,8 @@ export interface PatternRound {
   unit: number;
   options: Buoy[];
   answer: number;
+  /** "Find the mistake" round: this wrong buoy stands at `gap` until the child spots it. */
+  error?: Buoy;
 }
 
 export interface BuoysTask {
@@ -246,14 +248,32 @@ function growingRound(rng: Rng): PatternRound {
   return { row, gap: 4, unit: 0, ...o };
 }
 
+/**
+ * From level 4 the last row hides a mistake: one buoy breaks the rule. Spotting
+ * it is checking a pattern, a harder step than continuing it (Rittle-Johnson et al., 2019).
+ */
+function errorRound(rng: Rng, level: number): PatternRound {
+  const unit = pick(rng, UNITS[level]!);
+  const map = letters(rng, level);
+  const len = Math.max(7, unit.length * 2 + 2);
+  const row = Array.from({ length: len }, (_, i) => map[unit[i % unit.length]!]!);
+  const gap = int(rng, unit.length, len - 2);
+  const used = [...new Set(unit)].map((k) => map[k]!);
+  const o = options(rng, row[gap]!, used);
+  const error = o.options.find((b) => !sameBuoy(b, row[gap]!))!;
+  return { row, gap, unit: unit.length, ...o, error };
+}
+
 export function generateBuoys(level: number, rng: Rng): BuoysTask {
   const lvl = Math.min(BUOYS_MAX_LEVEL, Math.max(1, level));
-  const rounds = Array.from({ length: 3 }, (_, i) => (lvl >= 5 && i === 1 ? growingRound(rng) : repeatingRound(rng, lvl)));
+  const rounds = Array.from({ length: 3 }, (_, i) =>
+    lvl >= 5 && i === 1 ? growingRound(rng) : lvl >= 4 && i === 2 ? errorRound(rng, lvl) : repeatingRound(rng, lvl),
+  );
   return {
     level: lvl,
     rounds,
     crossSec: lvl <= 2 ? 11 : 9,
-    itemId: `buoys${lvl}-${rounds.map((r) => (r.unit ? `u${r.unit}` : 'grow')).join('-')}`,
+    itemId: `buoys${lvl}-${rounds.map((r) => (r.error ? 'err' : r.unit ? `u${r.unit}` : 'grow')).join('-')}`,
   };
 }
 

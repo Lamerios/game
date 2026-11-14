@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { phrase } from '../../core/phrases';
+import { english, phrase } from '../../core/phrases';
+import { voice } from '../../core/audio';
 import { FONT, W } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
 import { generateBuoys, type Buoy, type BuoysTask, type PatternRound } from './generators';
@@ -37,7 +38,11 @@ export class BuoysScene extends SeaScene {
     return this.t.itemId;
   }
 
+  /** In a "find the mistake" row: the wrong buoy is still standing there. */
+  private hunting = false;
+
   protected instruction() {
+    if (this.hunting) return phrase('buoys.error');
     return this.round === 0 ? phrase('buoys.intro') : phrase('buoys.next');
   }
 
@@ -45,6 +50,7 @@ export class BuoysScene extends SeaScene {
     this.t = generateBuoys(this.task.level, this.rng);
     this.round = 0;
     this.placed = undefined;
+    this.hunting = !!this.r.error;
     this.add.image(W / 2, 360, 'bg-sea').setDisplaySize(W, 720);
     this.waves(420);
     this.showRound();
@@ -87,6 +93,15 @@ export class BuoysScene extends SeaScene {
     r.row.forEach((b, i) => {
       const x = x0 + i * step;
       this.slotX.push(x);
+      if (i === r.gap && r.error && this.hunting) {
+        this.gapPos = [x, ROW_Y];
+        const bad = this.buoy(r.error, step - 14);
+        bad.setPosition(x, ROW_Y);
+        bad.setSize(step, SIZE + 20).setInteractive({ useHandCursor: true });
+        bad.on('pointerdown', () => !this.locked && this.spotted());
+        items.push(bad);
+        return;
+      }
       if (i === r.gap) {
         this.gapPos = [x, ROW_Y];
         items.push(this.add.rectangle(x, ROW_Y, step - 14, SIZE + 10, 0xffffff, 0.25).setStrokeStyle(4, 0xffffff));
@@ -95,9 +110,19 @@ export class BuoysScene extends SeaScene {
       }
       const c = this.buoy(b, step - 14);
       c.setPosition(x, ROW_Y);
+      if (this.hunting) {
+        // Tapping a buoy that fits the rule is a miss in the hunt.
+        c.setSize(step, SIZE + 20).setInteractive({ useHandCursor: true });
+        c.on('pointerdown', () => {
+          if (this.locked) return;
+          this.tweens.add({ targets: c, angle: 12, yoyo: true, repeat: 2, duration: 90 });
+          this.wrong();
+        });
+      }
       items.push(c);
     });
     this.rowLayer = this.add.container(0, 0, items);
+    if (this.hunting) return;
 
     // Candidates float by in a loop.
     r.options.forEach((b, i) => {
@@ -106,6 +131,13 @@ export class BuoysScene extends SeaScene {
       this.tappable(c, 150, 160, () => this.catch(c));
       this.addDrifter(c, OPT_Y + (i % 2) * 40, this.t.crossSec, { x: W - 150 + i * SPACING, loop: SPACING * 3 });
     });
+  }
+
+  /** The mistake was found: it turns into a "?" and the right buoy floats by. */
+  private spotted() {
+    this.hunting = false;
+    this.say(phrase('buoys.error.found'));
+    this.showRound();
   }
 
   private catch(c: Phaser.GameObjects.Container) {
@@ -123,7 +155,10 @@ export class BuoysScene extends SeaScene {
     this.placed = c;
     const [x, y] = this.gapPos;
     this.tweens.add({ targets: c, x, y, scale: 0.8, duration: 450, ease: 'Back.easeOut' });
-    this.time.delayedCall(900, () => this.roundDone());
+    // The colour in English: every stage teaches a few words.
+    const b = this.r.options[c.getData('i') as number];
+    if (b) this.time.delayedCall(300, () => voice.say(english(b.color)));
+    this.time.delayedCall(1100, () => this.roundDone());
   }
 
   private roundDone() {
@@ -134,12 +169,17 @@ export class BuoysScene extends SeaScene {
     }
     this.round++;
     this.locked = false;
+    this.hunting = !!this.r.error;
     this.showRound();
     this.say(this.instruction());
   }
 
   protected showHint(step: HintStep) {
     const r = this.r;
+    if (this.hunting) {
+      if (step < 4) return this.say(step === 1 ? phrase('buoys.hint.1') : phrase('buoys.error.hint'));
+      return this.spotted();
+    }
     if (step === 1) return this.say(r.unit ? phrase('buoys.hint.1') : phrase('buoys.hint.grow'));
     if (step === 2) {
       if (!r.unit) {

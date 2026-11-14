@@ -176,7 +176,7 @@ export const NUMBERS: readonly Word[] = NUMBER_VALUES.map((n) => ({ id: numberId
 
 export const WORDS: readonly Word[] = [...PICTURES, ...COLORS, ...NUMBERS];
 
-export type Mode = 'words' | 'numbers' | 'mix';
+export type Mode = 'words' | 'numbers' | 'mix' | 'rules' | 'sounds';
 
 export const wordById = (id: string) => WORDS.find((w) => w.id === id)!;
 
@@ -234,15 +234,19 @@ export const NEW_PER_GAME = 4;
  * from basic to harder), then the ones still being learnt (least practised
  * first), then learnt ones for review. Short of those, more new words.
  */
-export function pickWords(stats: Record<string, number>, n: number, rng: Rng, pool: readonly Word[] = PICTURES): string[] {
+export function pickWords(stats: Record<string, number>, n: number, rng: Rng, pool: readonly Word[] = PICTURES, due: readonly string[] = []): string[] {
   const count = (w: Word) => stats[w.id] ?? 0;
   const byScore = (ws: Word[], score: (w: Word, i: number) => number) =>
     ws.map((w, i) => ({ w, s: score(w, i) })).sort((a, b) => a.s - b.s).map((x) => x.w.id);
   const fresh = byScore(pool.filter((w) => count(w) === 0), (_, i) => i + rng() * 12);
   const learning = byScore(pool.filter((w) => count(w) > 0 && count(w) < KNOWN_AT), (w) => count(w) + rng() * 1.5);
   const known = byScore(pool.filter((w) => count(w) >= KNOWN_AT), (w) => count(w) + rng() * 3);
-  const out = fresh.slice(0, NEW_PER_GAME);
+  // Words due in the shared log (met in any game) come back first, up to half the game.
+  const inPool = new Set(pool.map((w) => w.id));
+  const out = due.filter((id) => inPool.has(id)).slice(0, Math.ceil(n / 2));
+  for (const id of fresh.slice(0, NEW_PER_GAME)) if (out.length < n && !out.includes(id)) out.push(id);
   for (const id of [...learning, ...known, ...fresh.slice(NEW_PER_GAME)]) {
+    if (out.includes(id)) continue;
     if (out.length >= n) break;
     out.push(id);
   }
@@ -253,11 +257,11 @@ export function pickWords(stats: Record<string, number>, n: number, rng: Rng, po
 const WORD_POOL: readonly Word[] = [...PICTURES, ...COLORS];
 
 /** The ten words of one game: words, numbers, or six words and four numbers mixed. */
-export function planGame(mode: Mode, stats: Record<string, number>, rounds: number, rng: Rng): string[] {
-  if (mode === 'words') return pickWords(stats, rounds, rng, WORD_POOL);
-  if (mode === 'numbers') return pickWords(stats, rounds, rng, NUMBERS);
+export function planGame(mode: Mode, stats: Record<string, number>, rounds: number, rng: Rng, due: readonly string[] = []): string[] {
+  if (mode === 'numbers') return pickWords(stats, rounds, rng, NUMBERS, due);
+  if (mode !== 'mix') return pickWords(stats, rounds, rng, WORD_POOL, due);
   const nums = Math.round(rounds * 0.4);
-  return shuffle(rng, [...pickWords(stats, rounds - nums, rng, WORD_POOL), ...pickWords(stats, nums, rng, NUMBERS)]);
+  return shuffle(rng, [...pickWords(stats, rounds - nums, rng, WORD_POOL, due), ...pickWords(stats, nums, rng, NUMBERS, due)]);
 }
 
 /** The number most easily mixed up with n when heard: thirteen/thirty, six/sixteen. */
@@ -291,4 +295,94 @@ export function distractors(target: string, k: number, round: number, rng: Rng):
     if (!out.includes(w.id)) out.push(w.id);
   }
   return out.slice(0, k);
+}
+
+// ---------- rule rounds and sound rounds ----------
+
+/**
+ * A round where more than one picture is right: "Only animals!" (eat every
+ * animal, leave the rest — go / no-go) or "Find a word that starts like ball!"
+ * (first sound, phonemic awareness in English). `line` is the English clip.
+ */
+export interface MultiRound {
+  line: string;
+  /** Pictures to eat. */
+  ok: string[];
+  /** Pictures to leave. */
+  avoid: string[];
+  /** The picture on the card (category example or the cue word). */
+  cue: string;
+}
+
+export const RULE_CATS = ['animal', 'fruit', 'vegetable', 'transport', 'clothes', 'toy'] as const;
+export type RuleCat = (typeof RULE_CATS)[number];
+export const ruleLine = (c: RuleCat) => `rule.${c}`;
+const RULE_TEXT: Record<RuleCat, string> = {
+  animal: 'Only animals!',
+  fruit: 'Only fruit!',
+  vegetable: 'Only vegetables!',
+  transport: 'Only transport!',
+  clothes: 'Only clothes!',
+  toy: 'Only toys!',
+};
+
+/** Sound groups by the first sound, not the letter: cat and kite start alike. */
+export const SOUND_CUES = { b: 'ball', k: 'cat', d: 'dog', f: 'fish', h: 'house', m: 'moon', p: 'pig', s: 'sun', t: 'tree' } as const;
+export type Sound = keyof typeof SOUND_CUES;
+export const soundLine = (cue: string) => `starts.${cue}`;
+
+const ENGLISH_WORDS: Record<string, string> = content.english.words;
+
+/** The first sound of a picture's English word, if it is one of the clear groups. */
+export function firstSound(id: string): Sound | undefined {
+  const t = (ENGLISH_WORDS[id] ?? '').toLowerCase();
+  if (/^(sh|ch|th|wh|ph|kn)/.test(t)) return undefined;
+  const c = t[0];
+  if (c === 'c' || c === 'k') return 'k';
+  return c && c in SOUND_CUES ? (c as Sound) : undefined;
+}
+
+export function multiLines(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const c of RULE_CATS) out[ruleLine(c)] = RULE_TEXT[c];
+  for (const cue of Object.values(SOUND_CUES)) out[soundLine(cue)] = `Find a word that starts like ${ENGLISH_WORDS[cue]}!`;
+  return out;
+}
+
+/**
+ * Rule game: the first half eats one category, then the rule switches. The old
+ * category stays on the board as the trap (the classic rule-switch test, DCCS).
+ */
+export function planRules(rng: Rng, rounds = 8): MultiRound[] {
+  const [a, b] = shuffle(rng, RULE_CATS) as RuleCat[];
+  const of = (c: RuleCat) => shuffle(rng, PICTURES.filter((w) => w.cat === c).map((w) => w.id));
+  const rest = (not: RuleCat[]) => shuffle(rng, PICTURES.filter((w) => !(not as string[]).includes(w.cat)).map((w) => w.id));
+  return Array.from({ length: rounds }, (_, i) => {
+    const cat = i < rounds / 2 ? a! : b!;
+    const other = cat === a ? b! : a!;
+    const pics = of(cat);
+    const ok = pics.slice(0, 2);
+    // After the switch the old category is the trap; before it, a random one.
+    const avoid = [...(i >= rounds / 2 ? of(other).slice(0, 2) : of(other).slice(0, 1)), ...rest([a!, b!]).slice(0, i >= rounds / 2 ? 1 : 2)];
+    // The card shows another picture of the category, not one on the board.
+    return { line: ruleLine(cat), ok, avoid, cue: pics[2]! };
+  });
+}
+
+/** Sound game: one picture starts like the cue word; the others start differently. */
+export function planSounds(rng: Rng, rounds = 8): MultiRound[] {
+  const groups = new Map<Sound, string[]>();
+  for (const w of PICTURES) {
+    const snd = firstSound(w.id);
+    if (snd) groups.set(snd, [...(groups.get(snd) ?? []), w.id]);
+  }
+  const sounds = shuffle(rng, (Object.keys(SOUND_CUES) as Sound[]).filter((x) => (groups.get(x)?.length ?? 0) >= 3)).slice(0, 4);
+  return Array.from({ length: rounds }, (_, i) => {
+    const snd = sounds[i % sounds.length]!;
+    const cue = SOUND_CUES[snd];
+    const ok = shuffle(rng, groups.get(snd)!.filter((id) => id !== cue)).slice(0, 1);
+    const n = i < 3 ? 2 : 3;
+    const avoid = shuffle(rng, PICTURES.filter((w) => w.id !== cue && firstSound(w.id) !== snd && firstSound(w.id) !== undefined).map((w) => w.id)).slice(0, n);
+    return { line: soundLine(cue), ok, avoid, cue };
+  });
 }

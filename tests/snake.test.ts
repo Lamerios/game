@@ -101,3 +101,63 @@ describe('snake', () => {
     expect(distractors('n6', 3, 6, rng)).toContain('n16');
   });
 });
+
+describe('snake: rule and sound rounds', () => {
+  it('rule game switches category halfway and keeps the old one as the trap', async () => {
+    const { planRules, wordById } = await import('../src/games/snake/logic');
+    const { mulberry32 } = await import('../src/games/common/rng');
+    const rng = mulberry32(4);
+    for (let k = 0; k < 50; k++) {
+      const rounds = planRules(rng, 6);
+      const first = rounds[0]!.line;
+      const last = rounds[5]!.line;
+      expect(first).not.toBe(last);
+      rounds.forEach((r, i) => {
+        const cat = r.line.split('.')[1];
+        expect(r.ok).toHaveLength(2);
+        for (const id of r.ok) expect(wordById(id).cat).toBe(cat);
+        for (const id of r.avoid) expect(wordById(id).cat).not.toBe(cat);
+        if (i >= 3) expect(r.avoid.some((id) => `rule.${wordById(id).cat}` === first)).toBe(true);
+      });
+    }
+  });
+
+  it('sound game: one picture starts like the cue (cat and kite alike), the rest do not', async () => {
+    const { planSounds, firstSound, multiLines } = await import('../src/games/snake/logic');
+    const { ENGLISH } = await import('../src/core/phrases');
+    const { mulberry32 } = await import('../src/games/common/rng');
+    expect(firstSound('kite')).toBe(firstSound('cat'));
+    expect(firstSound('ship')).toBeUndefined();
+    for (const [id, text] of Object.entries(multiLines())) expect(ENGLISH[id], id).toBe(text);
+    const rng = mulberry32(9);
+    for (let k = 0; k < 50; k++) {
+      for (const r of planSounds(rng, 10)) {
+        const snd = firstSound(r.cue);
+        expect(r.ok).toHaveLength(1);
+        expect(firstSound(r.ok[0]!)).toBe(snd);
+        expect(r.ok).not.toContain(r.cue);
+        for (const id of r.avoid) expect(firstSound(id)).not.toBe(snd);
+      }
+    }
+  });
+
+  it('words due in the shared log come first', async () => {
+    const { pickWords, PICTURES } = await import('../src/games/snake/logic');
+    const { mulberry32 } = await import('../src/games/common/rng');
+    const out = pickWords({}, 10, mulberry32(1), PICTURES, ['zebra', 'octopus']);
+    expect(out).toContain('zebra');
+    expect(out).toContain('octopus');
+  });
+});
+
+describe('snake: rule card', () => {
+  it('the card picture is of the category but not on the board', async () => {
+    const { planRules, wordById } = await import('../src/games/snake/logic');
+    const { mulberry32 } = await import('../src/games/common/rng');
+    const rng = mulberry32(2);
+    for (let k = 0; k < 50; k++) for (const r of planRules(rng, 6)) {
+      expect(`rule.${wordById(r.cue).cat}`).toBe(r.line);
+      expect([...r.ok, ...r.avoid]).not.toContain(r.cue);
+    }
+  });
+});
