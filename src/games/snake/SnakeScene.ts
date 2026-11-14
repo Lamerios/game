@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
+import { firstTries, loadStats, recordWord } from '../../core/wordStats';
 import { button, COLORS, FONT, H, W } from '../../scenes/ui';
 import { mulberry32, type Rng } from '../common/rng';
 import {
@@ -15,7 +16,6 @@ const X0 = 30;
 const Y0 = 100;
 const ROUNDS = 10;
 const ITEM_SIZE = 86;
-const STATS_KEY = 'snake-words';
 const INTRO_KEY = 'snake-intro';
 const YES_COUNT = 5;
 
@@ -41,6 +41,18 @@ function colorSvg(paint: string): string {
       C98 144 100 168 86 170 C72 172 74 150 62 146 C44 140 22 128 22 92 C22 54 58 24 96 22Z"
       fill="${paint}" stroke="#2b2d42" stroke-width="7" stroke-linejoin="round"/>
     <ellipse cx="72" cy="62" rx="22" ry="12" transform="rotate(-25 72 62)" fill="#ffffff" fill-opacity=".45"/></svg>`;
+}
+
+/** Queues every word picture (photos, number cards, colour blobs) as `snake-<id>`. Also used by the parent statistics. */
+export function preloadWordArt(scene: Phaser.Scene) {
+  for (const w of WORDS) {
+    if (scene.textures.exists(`snake-${w.id}`)) continue;
+    const n = numberOf(w.id);
+    const paint = PAINTS.find((c) => c.id === w.id)?.paint;
+    if (paint) scene.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(colorSvg(paint))}`);
+    else if (n === undefined) scene.load.image(`snake-${w.id}`, `${import.meta.env.BASE_URL}snake/${w.id}.webp`);
+    else scene.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(numberSvg(n))}`);
+  }
 }
 
 /** English as shown on screen ("seven", "apple"). */
@@ -92,6 +104,8 @@ export class SnakeScene extends Phaser.Scene {
   private round = 0;
   private target = '';
   private firstTry = true;
+  /** Wrong pictures eaten while the current word was asked, for the parent statistics. */
+  private wrongPicks: string[] = [];
   private eaten: string[] = [];
   private talking = false;
   private talkToken = 0;
@@ -113,19 +127,12 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   preload() {
-    for (const w of WORDS) {
-      if (this.textures.exists(`snake-${w.id}`)) continue;
-      const n = numberOf(w.id);
-      const paint = PAINTS.find((c) => c.id === w.id)?.paint;
-      if (paint) this.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(colorSvg(paint))}`);
-      else if (n === undefined) this.load.image(`snake-${w.id}`, `${import.meta.env.BASE_URL}snake/${w.id}.webp`);
-      else this.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(numberSvg(n))}`);
-    }
+    preloadWordArt(this);
   }
 
   create() {
     this.rng = mulberry32(Date.now() & 0xffffffff);
-    this.stats = readStore<Record<string, number>>(STATS_KEY, {});
+    this.stats = firstTries(loadStats());
     this.body = [{ x: 4, y: 5 }, { x: 3, y: 5 }, { x: 2, y: 5 }];
     this.prev = this.body.map((c) => ({ ...c }));
     this.dir = 'right';
@@ -343,6 +350,7 @@ export class SnakeScene extends Phaser.Scene {
     if (this.round >= ROUNDS) return this.win();
     this.target = this.words[this.round]!;
     this.firstTry = true;
+    this.wrongPicks = [];
     this.repeats = 0;
     this.showCard();
     const ids = [this.target, ...distractors(this.target, itemsForRound(this.round) - 1, this.round, this.rng)];
@@ -389,6 +397,7 @@ export class SnakeScene extends Phaser.Scene {
     this.paused = true;
     if (item.id !== this.target) {
       this.firstTry = false;
+      this.wrongPicks.push(item.id);
       this.cameras.main.shake(120, 0.003);
       this.tweens.add({ targets: item.img, alpha: 0, scale: item.img.scale * 1.6, duration: 400, onComplete: () => item.img.destroy() });
       this.floatWord(item.id, item.img.x, item.img.y, '#ffffff');
@@ -401,7 +410,7 @@ export class SnakeScene extends Phaser.Scene {
     const slot = this.eaten.length;
     this.eaten.push(item.id);
     if (this.firstTry) this.stats[item.id] = (this.stats[item.id] ?? 0) + 1;
-    writeStore(STATS_KEY, this.stats);
+    recordWord(item.id, this.wrongPicks);
     this.burst(item.img.x, item.img.y);
     this.floatWord(item.id, item.img.x, item.img.y, '#ffd166');
     this.tweens.add({
