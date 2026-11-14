@@ -358,6 +358,7 @@ export class SnakeScene extends Phaser.Scene {
   private repeatWord() {
     if (this.talking || !this.target) return;
     this.lastSpoken = this.time.now;
+    this.run?.event('repeat', { item: this.target });
     voice.say(english(this.target));
   }
 
@@ -383,7 +384,10 @@ export class SnakeScene extends Phaser.Scene {
       }
     }
     lines.push(english(this.target));
-    if (await this.talk(...lines)) this.paused = false;
+    if (await this.talk(...lines)) {
+      this.paused = false;
+      this.run?.ask(this.target, { round: this.round, options: ids.length });
+    }
   }
 
   /** "Only animals!" / "Find a word that starts like ball!": every right picture is eaten, the others are left. */
@@ -408,7 +412,10 @@ export class SnakeScene extends Phaser.Scene {
     }
     lines.push(english(r.line));
     if (!rules) lines.push(english(r.cue));
-    if (await this.talk(...lines)) this.paused = false;
+    if (await this.talk(...lines)) {
+      this.paused = false;
+      this.run?.ask(r.line, { round: this.round, options: r.ok.length + r.avoid.length });
+    }
   }
 
   private showRuleCard(r: MultiRound) {
@@ -450,9 +457,9 @@ export class SnakeScene extends Phaser.Scene {
     this.items = this.items.filter((it) => it !== item);
     this.tweens.killTweensOf(item.img);
     this.paused = true;
+    this.run?.answer({ item: this.target, correct: item.id === this.target, chosen: item.id === this.target ? undefined : item.id, round: this.round });
     if (item.id !== this.target) {
       if (this.firstTry) recordWord(this.target, false, 'snake');
-      this.run?.answer({ item: this.target, correct: false, chosen: item.id, ms: Date.now() - this.askedAt, round: this.round });
       this.firstTry = false;
       this.cameras.main.shake(120, 0.003);
       this.tweens.add({ targets: item.img, alpha: 0, scale: item.img.scale * 1.6, duration: 400, onComplete: () => item.img.destroy() });
@@ -469,7 +476,6 @@ export class SnakeScene extends Phaser.Scene {
       this.stats[item.id] = (this.stats[item.id] ?? 0) + 1;
       recordWord(item.id, true, 'snake');
     }
-    this.run?.answer({ item: item.id, correct: true, ms: Date.now() - this.askedAt, round: this.round });
     writeStore(STATS_KEY, this.stats);
     this.burst(item.img.x, item.img.y);
     this.floatWord(item.id, item.img.x, item.img.y, '#ffd166');

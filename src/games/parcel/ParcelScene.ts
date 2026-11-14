@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { track } from '../../core/analytics';
+import { startRun, track, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
@@ -177,6 +177,7 @@ export class ParcelScene extends Phaser.Scene {
   private repeatCue() {
     if (this.talking || !this.cue) return;
     this.lastSpoken = this.time.now;
+    this.run?.event('repeat');
     voice.say(this.cue);
   }
 
@@ -231,7 +232,7 @@ export class ParcelScene extends Phaser.Scene {
       this.add.text(30, 40, `${this.childName}: кругосветная посылка`, { fontFamily: FONT, fontSize: '34px', color: '#ffffff', stroke: '#0b2233', strokeThickness: 8 }).setOrigin(0, 0.5),
     );
     this.drawStamps(leg);
-    this.keep(button(this, 1170, 40, 'Домой', () => this.scene.start('Harbor'), { w: 170, h: 64, color: 0x6c757d }));
+    this.keep(button(this, 1170, 40, 'Домой', () => this.scene.start('Menu'), { w: 170, h: 64, color: 0x6c757d }));
     this.rumb = this.keep(this.add.image(90, 640, 'char-rumb').setDisplaySize(130, 130).setData('y', 640));
 
     const go = this.keep(button(this, W / 2, 400, 'В путь!', () => void this.startLeg(), { w: 260, h: 96, color: COLORS.leaf }));
@@ -458,7 +459,7 @@ export class ParcelScene extends Phaser.Scene {
     icon.fillStyle(0xffffff).fillRect(-22, -12, 14, 24).fillTriangle(-10, -12, 10, -28, 10, 28).fillTriangle(-10, 12, 10, -28, 10, 28);
     icon.lineStyle(5, 0xffffff).beginPath().arc(14, 0, 14, -0.9, 0.9).strokePath();
     listen.add(icon);
-    this.keep(button(this, 1170, 60, 'Домой', () => this.scene.start('Harbor'), { w: 170, h: 64, color: 0x6c757d }));
+    this.keep(button(this, 1170, 60, 'Домой', () => this.scene.start('Menu'), { w: 170, h: 64, color: 0x6c757d }));
     this.rumb = this.keep(this.add.image(80, GROUND - 210, 'char-rumb').setDisplaySize(110, 110).setData('y', GROUND - 210));
   }
 
@@ -472,9 +473,12 @@ export class ParcelScene extends Phaser.Scene {
     this.bubble?.setText('?').setColor('#277da1');
   }
 
+  private run?: Run;
+
   private async startLeg() {
     const i = this.progress.leg;
     const leg = LEGS[i]!;
+    this.run = startRun('parcel', { leg: i, trips: this.progress.trips });
     this.clear();
     this.drawStage(leg);
     this.drawTopBar();
@@ -498,6 +502,7 @@ export class ParcelScene extends Phaser.Scene {
     this.repeats = 0;
     if (!(await this.talk(phrase(`rumb.parcel.leg.${i}` as PhraseId), this.cue))) return;
     this.busy = false;
+    this.run?.ask(takeId(leg.answer), { kind: 'vehicle', options: n });
 
     for (const card of cards) {
       card.c.setInteractive({ useHandCursor: true });
@@ -505,6 +510,7 @@ export class ParcelScene extends Phaser.Scene {
         if (this.busy || this.talking || card.used) return;
         this.busy = true;
         this.repeats = 0;
+        this.run?.answer({ item: takeId(leg.answer), correct: card.v === leg.answer, chosen: card.v === leg.answer ? undefined : card.v, kind: 'vehicle' });
         if (card.v === leg.answer) {
           cards.forEach((o) => o.c.disableInteractive());
           await this.chooseRight(leg, card.v, card.c, cards.map((o) => o.c), parcel);
@@ -614,6 +620,7 @@ export class ParcelScene extends Phaser.Scene {
     if (!(await this.talk(...lines, this.cue))) return;
     go.setAlpha(1);
     this.busy = false;
+    this.run?.ask(loadId(task.n, task.color), { kind: 'load', n: task.n, color: task.color ?? null });
   }
 
   private loadedBoxes() {
@@ -664,6 +671,10 @@ export class ParcelScene extends Phaser.Scene {
     this.repeats = 0;
     const loaded = this.loadedBoxes();
     const res = checkLoad(this.task, loaded.map((b) => b.color));
+    this.run?.answer({
+      item: loadId(this.task.n, this.task.color), correct: res.ok, kind: 'load',
+      why: res.ok ? undefined : res.why, chosen: res.ok ? undefined : String(loaded.length),
+    });
     if (res.ok) {
       this.cue = undefined;
       this.reveal(ENGLISH[loadId(this.task.n, this.task.color)]!);
@@ -723,6 +734,7 @@ export class ParcelScene extends Phaser.Scene {
     this.burst(v.x, v.y - 60);
     this.progress = { ...this.progress, leg: i + 1 };
     writeStore(STORE_KEY, this.progress);
+    this.run?.end({ completed: true, leg: i });
     if (!(await this.talk(phrase(`rumb.parcel.arrive.${i}` as PhraseId)))) return;
     if (this.progress.leg >= LEGS.length) await this.finale();
     else await this.showMap();
@@ -742,6 +754,7 @@ export class ParcelScene extends Phaser.Scene {
     const leave = (shooed: boolean) => {
       if (gone) return;
       gone = true;
+      this.run?.event('magpie', { shooed });
       m.disableInteractive();
       this.tweens.killTweensOf(m);
       this.tweens.add({ targets: m, x: W + 200, y: -100, angle: shooed ? 30 : 0, duration: 800, ease: 'Quad.easeIn' });
@@ -851,6 +864,6 @@ export class ParcelScene extends Phaser.Scene {
         this.scene.restart();
       }, { w: 300, h: 90, color: COLORS.leaf }).setDepth(12),
     );
-    this.keep(button(this, W / 2 + 170, 620, 'Домой', () => this.scene.start('Harbor'), { w: 300, h: 90, color: 0x6c757d }).setDepth(12));
+    this.keep(button(this, W / 2 + 170, 620, 'Домой', () => this.scene.start('Menu'), { w: 300, h: 90, color: 0x6c757d }).setDepth(12));
   }
 }

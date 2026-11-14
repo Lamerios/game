@@ -2,9 +2,10 @@ import Phaser from 'phaser';
 import { preloadArt } from '../art/load';
 import { voice } from '../core/audio';
 import { GameState } from '../game-state';
+import { gameByHash } from '../games/registry';
 import { button, FONT, H, W } from './ui';
 
-/** Loads art and state, then waits for the first tap, which also unlocks audio on iOS. */
+/** Loads art and state, then opens the main menu (or the game named in the #hash). */
 export class BootScene extends Phaser.Scene {
   constructor() {
     super('Boot');
@@ -19,20 +20,24 @@ export class BootScene extends Phaser.Scene {
   }
 
   async create() {
-    this.add.image(W / 2, H / 2, 'bg-harbor').setDisplaySize(W, H);
-    this.add.image(330, 470, 'yacht-side').setDisplaySize(360, 332);
-    this.add
-      .text(W / 2, 150, 'Кругосветка капитана', { fontFamily: FONT, fontSize: '64px', color: '#ffffff', stroke: '#1b4965', strokeThickness: 10 })
-      .setOrigin(0.5);
     const [state] = await Promise.all([GameState.load(), voice.init()]);
     this.registry.set('state', state);
-    button(this, W / 2 + 180, H / 2 + 60, 'Поднять якорь', () => {
+    // …/game/#snake, #race, #voyage… open that game straight away (after one tap, which unlocks sound).
+    const direct = gameByHash(location.hash);
+    if (!direct) {
+      this.scene.start('Menu');
+      return;
+    }
+    this.add.image(W / 2, H / 2, 'bg-harbor').setDisplaySize(W, H);
+    this.add
+      .text(W / 2, 200, direct.title, { fontFamily: FONT, fontSize: '64px', color: '#ffffff', stroke: '#1b4965', strokeThickness: 10 })
+      .setOrigin(0.5);
+    button(this, W / 2, H / 2 + 60, 'Играть!', () => {
       const ctx = (this.sound as Phaser.Sound.WebAudioSoundManager).context;
       if (ctx && ctx.state === 'suspended') void ctx.resume();
       voice.unlock();
-      // …/game/#snake, #parcel and #race open those English games straight away.
-      const direct: Record<string, string> = { '#snake': 'Snake', '#parcel': 'Parcel', '#race': 'Race', '#inverse': 'Inverse', '#logbook': 'Logbook', '#anchor': 'Anchor' };
-      this.scene.start(direct[location.hash] ?? 'Harbor');
+      this.registry.set('menu-unlocked', true);
+      this.scene.start(direct.scene, direct.data);
     }, { w: 460 });
   }
 }
