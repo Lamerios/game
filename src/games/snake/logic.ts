@@ -17,7 +17,9 @@ export interface Cell {
 export const DIRS: Record<Dir, Cell> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
 export const OPPOSITE: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
 
-export type Category = 'fruit' | 'vegetable' | 'animal' | 'thing' | 'number';
+export type Category =
+  | 'fruit' | 'vegetable' | 'animal' | 'thing' | 'food' | 'transport' | 'home' | 'clothes' | 'toy' | 'nature' | 'body'
+  | 'color' | 'number';
 export interface Word {
   /** Also the picture (public/snake/<id>.webp; numbers are drawn) and the clip (en.<id>). Numbers are n0…n100. */
   id: string;
@@ -67,6 +69,103 @@ export const PICTURES: readonly Word[] = [
   { id: 'boat', ru: 'кораблик', cat: 'thing' },
   { id: 'cake', ru: 'торт', cat: 'thing' },
   { id: 'egg', ru: 'яйцо', cat: 'thing' },
+  { id: 'chicken', ru: 'курица', cat: 'animal' },
+  { id: 'sheep', ru: 'овца', cat: 'animal' },
+  { id: 'goat', ru: 'коза', cat: 'animal' },
+  { id: 'giraffe', ru: 'жираф', cat: 'animal' },
+  { id: 'zebra', ru: 'зебра', cat: 'animal' },
+  { id: 'tiger', ru: 'тигр', cat: 'animal' },
+  { id: 'penguin', ru: 'пингвин', cat: 'animal' },
+  { id: 'owl', ru: 'сова', cat: 'animal' },
+  { id: 'snake', ru: 'змея', cat: 'animal' },
+  { id: 'bee', ru: 'пчела', cat: 'animal' },
+  { id: 'butterfly', ru: 'бабочка', cat: 'animal' },
+  { id: 'snail', ru: 'улитка', cat: 'animal' },
+  { id: 'crab', ru: 'краб', cat: 'animal' },
+  { id: 'octopus', ru: 'осьминог', cat: 'animal' },
+  { id: 'whale', ru: 'кит', cat: 'animal' },
+  { id: 'dolphin', ru: 'дельфин', cat: 'animal' },
+  { id: 'fox', ru: 'лиса', cat: 'animal' },
+  { id: 'wolf', ru: 'волк', cat: 'animal' },
+  { id: 'hedgehog', ru: 'ёжик', cat: 'animal' },
+  { id: 'spider', ru: 'паук', cat: 'animal' },
+  { id: 'ant', ru: 'муравей', cat: 'animal' },
+  { id: 'camel', ru: 'верблюд', cat: 'animal' },
+  { id: 'kangaroo', ru: 'кенгуру', cat: 'animal' },
+  { id: 'crocodile', ru: 'крокодил', cat: 'animal' },
+  { id: 'shark', ru: 'акула', cat: 'animal' },
+  { id: 'parrot', ru: 'попугай', cat: 'animal' },
+  { id: 'bread', ru: 'хлеб', cat: 'food' },
+  { id: 'cheese', ru: 'сыр', cat: 'food' },
+  { id: 'milk', ru: 'молоко', cat: 'food' },
+  { id: 'icecream', ru: 'мороженое', cat: 'food' },
+  { id: 'pizza', ru: 'пицца', cat: 'food' },
+  { id: 'candy', ru: 'конфета', cat: 'food' },
+  { id: 'cookie', ru: 'печенье', cat: 'food' },
+  { id: 'sandwich', ru: 'бутерброд', cat: 'food' },
+  { id: 'chocolate', ru: 'шоколад', cat: 'food' },
+  { id: 'pineapple', ru: 'ананас', cat: 'fruit' },
+  { id: 'peach', ru: 'персик', cat: 'fruit' },
+  { id: 'broccoli', ru: 'брокколи', cat: 'vegetable' },
+  { id: 'pepper', ru: 'перец', cat: 'vegetable' },
+  { id: 'bus', ru: 'автобус', cat: 'transport' },
+  { id: 'train', ru: 'поезд', cat: 'transport' },
+  { id: 'plane', ru: 'самолёт', cat: 'transport' },
+  { id: 'bicycle', ru: 'велосипед', cat: 'transport' },
+  { id: 'ship', ru: 'корабль', cat: 'transport' },
+  { id: 'rocket', ru: 'ракета', cat: 'transport' },
+  { id: 'helicopter', ru: 'вертолёт', cat: 'transport' },
+  { id: 'truck', ru: 'грузовик', cat: 'transport' },
+  { id: 'key', ru: 'ключ', cat: 'home' },
+  { id: 'bed', ru: 'кровать', cat: 'home' },
+  { id: 'chair', ru: 'стул', cat: 'home' },
+  { id: 'door', ru: 'дверь', cat: 'home' },
+  { id: 'clock', ru: 'часы', cat: 'home' },
+  { id: 'book', ru: 'книга', cat: 'home' },
+  { id: 'pencil', ru: 'карандаш', cat: 'home' },
+  { id: 'umbrella', ru: 'зонт', cat: 'home' },
+  { id: 'cap', ru: 'кепка', cat: 'clothes' },
+  { id: 'shoe', ru: 'кроссовок', cat: 'clothes' },
+  { id: 'socks', ru: 'носки', cat: 'clothes' },
+  { id: 'dress', ru: 'платье', cat: 'clothes' },
+  { id: 'tshirt', ru: 'футболка', cat: 'clothes' },
+  { id: 'glasses', ru: 'очки', cat: 'clothes' },
+  { id: 'backpack', ru: 'рюкзак', cat: 'clothes' },
+  { id: 'crown', ru: 'корона', cat: 'clothes' },
+  { id: 'gift', ru: 'подарок', cat: 'toy' },
+  { id: 'balloon', ru: 'шарик', cat: 'toy' },
+  { id: 'kite', ru: 'воздушный змей', cat: 'toy' },
+  { id: 'teddy', ru: 'мишка', cat: 'toy' },
+  { id: 'drum', ru: 'барабан', cat: 'toy' },
+  { id: 'guitar', ru: 'гитара', cat: 'toy' },
+  { id: 'moon', ru: 'луна', cat: 'nature' },
+  { id: 'cloud', ru: 'облако', cat: 'nature' },
+  { id: 'snowman', ru: 'снеговик', cat: 'nature' },
+  { id: 'rainbow', ru: 'радуга', cat: 'nature' },
+  { id: 'fire', ru: 'огонь', cat: 'nature' },
+  { id: 'leaf', ru: 'лист', cat: 'nature' },
+  { id: 'mountain', ru: 'гора', cat: 'nature' },
+  { id: 'snowflake', ru: 'снежинка', cat: 'nature' },
+  { id: 'eye', ru: 'глаз', cat: 'body' },
+  { id: 'mouth', ru: 'рот', cat: 'body' },
+  { id: 'tooth', ru: 'зуб', cat: 'body' },
+  { id: 'hand', ru: 'рука', cat: 'body' },
+  { id: 'ear', ru: 'ухо', cat: 'body' },
+  { id: 'nose', ru: 'нос', cat: 'body' },
+];
+
+/** Colours: drawn paint blobs; id c-<name> (so the colour orange is not the fruit). */
+export const COLORS: readonly (Word & { paint: string })[] = [
+  { id: 'c-red', ru: 'красный', cat: 'color', paint: '#e63946' },
+  { id: 'c-blue', ru: 'синий', cat: 'color', paint: '#277da1' },
+  { id: 'c-green', ru: 'зелёный', cat: 'color', paint: '#43aa8b' },
+  { id: 'c-yellow', ru: 'жёлтый', cat: 'color', paint: '#ffd23f' },
+  { id: 'c-orange', ru: 'оранжевый', cat: 'color', paint: '#f77f00' },
+  { id: 'c-pink', ru: 'розовый', cat: 'color', paint: '#ff8fab' },
+  { id: 'c-purple', ru: 'фиолетовый', cat: 'color', paint: '#7b2cbf' },
+  { id: 'c-brown', ru: 'коричневый', cat: 'color', paint: '#8d5524' },
+  { id: 'c-black', ru: 'чёрный', cat: 'color', paint: '#222222' },
+  { id: 'c-white', ru: 'белый', cat: 'color', paint: '#ffffff' },
 ];
 
 /** English numbers: 0–20, then the tens up to 100. */
@@ -75,7 +174,7 @@ export const numberId = (n: number) => `n${n}`;
 export const numberOf = (id: string) => (/^n\d+$/.test(id) ? Number(id.slice(1)) : undefined);
 export const NUMBERS: readonly Word[] = NUMBER_VALUES.map((n) => ({ id: numberId(n), ru: unstress(content.numbers.nom[n]!), cat: 'number' }));
 
-export const WORDS: readonly Word[] = [...PICTURES, ...NUMBERS];
+export const WORDS: readonly Word[] = [...PICTURES, ...COLORS, ...NUMBERS];
 
 export type Mode = 'words' | 'numbers' | 'mix';
 
@@ -124,25 +223,41 @@ export function placeItems(n: number, body: readonly Cell[], dir: Dir, cols: num
   return out;
 }
 
+/** Eaten right on the first try this many times = learnt; it then only comes back for review. */
+export const KNOWN_AT = 3;
+/** New words per game: a non-native 6-year-old learns better meeting a few new ones among familiar ones. */
+export const NEW_PER_GAME = 4;
+
 /**
- * Words for one game: the least practised first (with some shuffle), so new
- * words keep coming and the tricky ones come back. `stats` = id → times eaten
- * right on the first try.
+ * Words for one game, `stats` = id → times eaten right on the first try:
+ * at most NEW_PER_GAME new words (the simplest first: the pool is ordered
+ * from basic to harder), then the ones still being learnt (least practised
+ * first), then learnt ones for review. Short of those, more new words.
  */
 export function pickWords(stats: Record<string, number>, n: number, rng: Rng, pool: readonly Word[] = PICTURES): string[] {
-  return shuffle(rng, pool)
-    .map((w) => ({ id: w.id, score: (stats[w.id] ?? 0) + rng() * 1.5 }))
-    .sort((a, b) => a.score - b.score)
-    .slice(0, n)
-    .map((w) => w.id);
+  const count = (w: Word) => stats[w.id] ?? 0;
+  const byScore = (ws: Word[], score: (w: Word, i: number) => number) =>
+    ws.map((w, i) => ({ w, s: score(w, i) })).sort((a, b) => a.s - b.s).map((x) => x.w.id);
+  const fresh = byScore(pool.filter((w) => count(w) === 0), (_, i) => i + rng() * 12);
+  const learning = byScore(pool.filter((w) => count(w) > 0 && count(w) < KNOWN_AT), (w) => count(w) + rng() * 1.5);
+  const known = byScore(pool.filter((w) => count(w) >= KNOWN_AT), (w) => count(w) + rng() * 3);
+  const out = fresh.slice(0, NEW_PER_GAME);
+  for (const id of [...learning, ...known, ...fresh.slice(NEW_PER_GAME)]) {
+    if (out.length >= n) break;
+    out.push(id);
+  }
+  return shuffle(rng, out.slice(0, n));
 }
 
-/** The ten words of one game: pictures, numbers, or six pictures and four numbers mixed. */
+/** Words mode draws from pictures and colours. */
+const WORD_POOL: readonly Word[] = [...PICTURES, ...COLORS];
+
+/** The ten words of one game: words, numbers, or six words and four numbers mixed. */
 export function planGame(mode: Mode, stats: Record<string, number>, rounds: number, rng: Rng): string[] {
-  if (mode === 'words') return pickWords(stats, rounds, rng, PICTURES);
+  if (mode === 'words') return pickWords(stats, rounds, rng, WORD_POOL);
   if (mode === 'numbers') return pickWords(stats, rounds, rng, NUMBERS);
   const nums = Math.round(rounds * 0.4);
-  return shuffle(rng, [...pickWords(stats, rounds - nums, rng, PICTURES), ...pickWords(stats, nums, rng, NUMBERS)]);
+  return shuffle(rng, [...pickWords(stats, rounds - nums, rng, WORD_POOL), ...pickWords(stats, nums, rng, NUMBERS)]);
 }
 
 /** The number most easily mixed up with n when heard: thirteen/thirty, six/sixteen. */
@@ -160,12 +275,14 @@ export function soundsLike(n: number): number | undefined {
 export function distractors(target: string, k: number, round: number, rng: Rng): string[] {
   const t = wordById(target);
   const isNum = t.cat === 'number';
-  const others = shuffle(rng, WORDS.filter((w) => w.id !== target && (w.cat === 'number') === isNum));
+  // Numbers among numbers, colours among colours, pictures among pictures.
+  const kind = (w: Word) => (w.cat === 'number' || w.cat === 'color' ? w.cat : 'picture');
+  const others = shuffle(rng, WORDS.filter((w) => w.id !== target && kind(w) === kind(t)));
   const out: string[] = [];
   if (round >= 4 && isNum) {
     const twin = soundsLike(numberOf(target)!);
     if (twin !== undefined) out.push(numberId(twin));
-  } else if (round >= 5) {
+  } else if (round >= 5 && t.cat !== 'color') {
     const same = others.find((w) => w.cat === t.cat);
     if (same) out.push(same.id);
   }
