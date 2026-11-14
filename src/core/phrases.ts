@@ -40,7 +40,8 @@ export const SPEAKERS: Record<string, { voice: string; emotion: string; speed: s
 /** English words (Snake game): id → text for the en-US voice. Clips are `en.<id>`. */
 export const ENGLISH: Record<string, string> = content.english.words;
 /** How the English clips are made (tools/tts.ts → Kokoro); `lang` also picks the browser voice. */
-export const ENGLISH_VOICE: { engine: string; voice: string; lang: string; emotion: string; speed: string } = content.english.voice;
+export const ENGLISH_VOICE: { engine: string; voice: string; lang: string; emotion: string; speed: string; take?: string } =
+  content.english.voice;
 /** The child's name the clips are generated with, with its stress mark. */
 export const CHILD = content.child;
 

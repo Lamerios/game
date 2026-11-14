@@ -121,7 +121,7 @@ async function main() {
   const next: Record<string, string> = {};
   const todo: [string, string][] = [];
   const settingsFor = (id: string): VoiceSettings => {
-    if (id.startsWith('en.')) return { ...ENGLISH_VOICE, voice: `${ENGLISH_VOICE.engine}:${ENGLISH_VOICE.voice}` };
+    if (id.startsWith('en.')) return { ...ENGLISH_VOICE, voice: [ENGLISH_VOICE.engine, ENGLISH_VOICE.voice, ENGLISH_VOICE.take].filter(Boolean).join(':') };
     const sp = speakerOf(id);
     if (!sp) return settings;
     const { voice, emotion, speed } = SPEAKERS[sp]!;
