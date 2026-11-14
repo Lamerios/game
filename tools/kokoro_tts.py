@@ -77,19 +77,38 @@ def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
             j = len(pcm)
             if words:
                 j = min(len(pcm), int((words[-1].end_ts + TAIL) * 24000))
-            out = pcm[i:j]
-            n0 = len(out)
-            out = trim_hiss(out, text).copy()
-            print(f"    cut: end_ts={'yes' if words else 'none'}, hiss trimmed {(n0 - len(out)) / 24:.0f} ms", flush=True)
+            out = pcm[i:j].copy()
             n = min(len(out), int(FADE * 24000))
             out[:n] *= np.linspace(0.0, 1.0, n, dtype=np.float32)
-            m = min(len(out), int(FADE_OUT * 24000))
-            out[len(out) - m:] *= np.linspace(1.0, 0.0, m, dtype=np.float32)
             return out
     # No timestamps: fall back to saying it once.
     print(f"  warning: no timestamps for {text!r}, said once", flush=True)
     single = [r.audio.numpy() for r in pipe(line, voice=voice, speed=speed) if r.audio is not None]
     return np.concatenate(single).astype(np.float32)
+
+
+def ffmpeg(args: list[str], data: bytes) -> bytes:
+    return subprocess.run(["ffmpeg", "-loglevel", "error", "-y", *args], input=data, check=True, capture_output=True).stdout
+
+
+RAW = ["-f", "f32le", "-ar", "24000", "-ac", "1"]
+
+
+def encode(pcm: np.ndarray, text: str, out: str) -> str:
+    """Trim silence, then the breathy tail, fade out, add a little air, write mp3.
+
+    The tail is judged on the clip as it sounds after mp3 encoding (encode, decode,
+    trim), which is where the hiss shows; then the trimmed audio is encoded once more.
+    """
+    trim = "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse"
+    mp3 = ffmpeg([*RAW, "-i", "-", "-af", trim, "-ac", "1", "-b:a", "96k", "-f", "mp3", "-"], pcm.astype(np.float32).tobytes())
+    x = np.frombuffer(ffmpeg(["-f", "mp3", "-i", "-", *RAW, "-"], mp3), np.float32)
+    n0 = len(x)
+    x = trim_hiss(x, text).copy()
+    m = min(len(x), int(FADE_OUT * 24000))
+    x[len(x) - m:] *= np.linspace(1.0, 0.0, m, dtype=np.float32)
+    ffmpeg([*RAW, "-i", "-", "-af", "adelay=60,apad=pad_dur=0.12", "-ac", "1", "-b:a", "96k", out], x.tobytes())
+    return f"hiss trimmed {(n0 - len(x)) / 24:.0f} ms"
 
 
 def main() -> None:
@@ -99,14 +118,8 @@ def main() -> None:
     pipe = KPipeline(lang_code=voice[0], repo_id="hexgrad/Kokoro-82M")
     for i, clip in enumerate(job["clips"], 1):
         pcm = render(pipe, clip["text"], voice, speed)
-        # 24 kHz mono float → mp3, with leading and trailing silence trimmed and a little air added.
-        trim = "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse,adelay=60,apad=pad_dur=0.12"
-        subprocess.run(
-            ["ffmpeg", "-loglevel", "error", "-y", "-f", "f32le", "-ar", "24000", "-ac", "1", "-i", "-",
-             "-af", trim, "-ac", "1", "-b:a", "64k", clip["out"]],
-            input=pcm.tobytes(), check=True,
-        )
-        print(f"  kokoro {i}/{len(job['clips'])}: {clip['text']}", flush=True)
+        note = encode(pcm, clip["text"], clip["out"])
+        print(f"  kokoro {i}/{len(job['clips'])}: {clip['text']} ({note})", flush=True)
 
 
 if __name__ == "__main__":
