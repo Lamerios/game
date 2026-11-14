@@ -40,20 +40,21 @@ export class HarborScene extends Phaser.Scene {
     const { items, close } = this.overlay('Для родителей');
     if (!state.gate().allowed) {
       items.push(
-        button(this, W / 2, H / 2 - 40, 'Ещё одно плавание', () => {
+        button(this, W / 2, H / 2 - 65, 'Ещё одно плавание', () => {
           track('voyage', 'parent.grant');
           close();
           void state.grantSession().then(() => this.scene.restart());
-        }, { w: 520, h: 80 }),
+        }, { w: 520, h: 70 }),
       );
     }
+    items.push(button(this, W / 2, H / 2 + 15, 'Английские слова', () => this.scene.start('WordStats'), { w: 520, h: 70, color: 0x40916c }));
     items.push(
-      button(this, W / 2, H / 2 + 60, 'Начать заново', () => {
+      button(this, W / 2, H / 2 + 95, 'Начать заново', () => {
         close();
         this.confirmReset(state);
-      }, { w: 520, h: 80, color: 0xc1121f }),
+      }, { w: 520, h: 70, color: 0xc1121f }),
     );
-    items.push(button(this, W / 2, H / 2 + 155, 'Закрыть', close, { w: 240, h: 64, color: 0x6c757d }));
+    items.push(button(this, W / 2, H / 2 + 168, 'Закрыть', close, { w: 240, h: 64, color: 0x6c757d }));
   }
 
   private confirmReset(state: GameState) {

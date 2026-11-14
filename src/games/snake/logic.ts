@@ -1,5 +1,6 @@
 import content from '../../../content/phrases.json';
 import { unstress } from '../../core/phrases';
+import { LEARNT_AT } from '../../core/wordStats';
 import { shuffle, type Rng } from '../common/rng';
 
 /**
@@ -224,7 +225,7 @@ export function placeItems(n: number, body: readonly Cell[], dir: Dir, cols: num
 }
 
 /** Eaten right on the first try this many times = learnt; it then only comes back for review. */
-export const KNOWN_AT = 3;
+export const KNOWN_AT = LEARNT_AT;
 /** New words per game: a non-native 6-year-old learns better meeting a few new ones among familiar ones. */
 export const NEW_PER_GAME = 4;
 

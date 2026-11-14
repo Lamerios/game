@@ -5,6 +5,7 @@ import { Storage } from '../core/storage';
 import type { GameState } from '../game-state';
 import { GAMES, SKILL_LABEL, gameById } from '../games/registry';
 import { WORDS } from '../games/snake/logic';
+import { firstTries, loadStats } from '../core/wordStats';
 
 /**
  * Parent dashboard: an HTML overlay above the game (tables, charts, files are
@@ -223,7 +224,7 @@ export function openDashboard(state: GameState, onChange: () => void) {
   };
 
   const wordsTab = (r: Report) => {
-    const snake = readLocal<Record<string, number>>('snake-words') ?? {};
+    const snake = firstTries(loadStats());
     const log = readLocal<Record<string, { box?: number; due?: number }>>('word-log') ?? {};
     // One row per word or task across all games, hardest first.
     const merged = new Map<string, { item: string; attempts: number; firstTry: number; ms: number[]; confusions: Record<string, number>; games: Set<string>; lastTs: number }>();

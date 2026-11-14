@@ -700,7 +700,8 @@
       "voice": "af_heart",
       "lang": "en-US",
       "emotion": "",
-      "speed": "0.85"
+      "speed": "0.85",
+      "take": "second-of-two-dehissed-3"
     },
     "words": {
       "apple": "apple",

@@ -20,24 +20,106 @@ def spoken(text: str) -> str:
     return text[:1].upper() + text[1:] + end
 
 
+# Said on its own, a short word often comes out with an extra vowel in front
+# ("uh-apple", heard as "an apple" / "a seven"): the model needs a moment to get
+# going. So the text is said twice, "Apple. Apple.", and only the second, clean
+# copy is kept, cut at its first token's start time.
+LEAD_IN = 0.03  # seconds kept before the second copy starts
+FADE = 0.012
+# The very end of a longer utterance trails off in a breathy hiss, heard as an
+# extra "s" ("bananas"). So the clip also ends shortly after the last word's
+# end time, with a soft fade-out.
+TAIL = 0.07
+FADE_OUT = 0.05
+# That hiss sits inside the last word's timing, so it is also trimmed by
+# signal: frames at the end that are mostly above 4 kHz. Words that really
+# end in a hissing sound or a released p/t/k (socks, fish, cat) are left alone.
+HISSING_ENDS = ("s", "x", "z", "f", "h", "p", "t", "k", "ce", "se", "ze", "ge", "pe", "te", "ke", "fe", "ve")
+
+
+def ends_hissing(text: str) -> bool:
+    """The text's last word ends in a hissing sound or p/t/k (socks, leaf, peach, cat, cake)."""
+    w = "".join(c for c in text.lower() if c.isalpha() or c == " ").strip().split(" ")[-1]
+    return w.endswith(HISSING_ENDS)
+
+
+def trim_hiss(pcm: np.ndarray, text: str, sr: int = 24000) -> np.ndarray:
+    if ends_hissing(text):
+        return pcm
+    fr = int(0.01 * sr)
+    end = len(pcm)
+    while end - fr > len(pcm) // 2:
+        seg = pcm[end - fr:end]
+        rms = float(np.sqrt((seg ** 2).mean()))
+        sp = np.abs(np.fft.rfft(seg))
+        hf = sp[np.fft.rfftfreq(fr, 1 / sr) > 4000].sum() / (sp.sum() + 1e-9)
+        if rms < 1e-4 or hf > 0.6:
+            end -= fr
+        else:
+            break
+    return pcm[:end]
+
+
+def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
+    line = spoken(text)
+    results = [r for r in pipe(f"{line} {line}", voice=voice, speed=speed) if r.audio is not None]
+    if not results:
+        raise SystemExit(f"no audio for {text!r}")
+    if len(results) == 1 and results[0].tokens:
+        r = results[0]
+        tokens = r.tokens
+        half = len(tokens) // 2
+        start = tokens[half].start_ts if half < len(tokens) else None
+        if start is not None:
+            pcm = r.audio.numpy().astype(np.float32)
+            i = max(0, int((start - LEAD_IN) * 24000))
+            words = [t for t in tokens[half:] if any(c.isalnum() for c in t.text) and t.end_ts is not None]
+            j = len(pcm)
+            if words:
+                j = min(len(pcm), int((words[-1].end_ts + TAIL) * 24000))
+            out = pcm[i:j].copy()
+            n = min(len(out), int(FADE * 24000))
+            out[:n] *= np.linspace(0.0, 1.0, n, dtype=np.float32)
+            return out
+    # No timestamps: fall back to saying it once.
+    print(f"  warning: no timestamps for {text!r}, said once", flush=True)
+    single = [r.audio.numpy() for r in pipe(line, voice=voice, speed=speed) if r.audio is not None]
+    return np.concatenate(single).astype(np.float32)
+
+
+def ffmpeg(args: list[str], data: bytes) -> bytes:
+    return subprocess.run(["ffmpeg", "-loglevel", "error", "-y", *args], input=data, check=True, capture_output=True).stdout
+
+
+RAW = ["-f", "f32le", "-ar", "24000", "-ac", "1"]
+
+
+def encode(pcm: np.ndarray, text: str, out: str) -> str:
+    """Trim silence, then the breathy tail, fade out, add a little air, write mp3.
+
+    The tail is judged on the clip as it sounds after mp3 encoding (encode, decode,
+    trim), which is where the hiss shows; then the trimmed audio is encoded once more.
+    """
+    trim = "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse"
+    mp3 = ffmpeg([*RAW, "-i", "-", "-af", trim, "-ac", "1", "-b:a", "96k", "-f", "mp3", "-"], pcm.astype(np.float32).tobytes())
+    x = np.frombuffer(ffmpeg(["-f", "mp3", "-i", "-", *RAW, "-"], mp3), np.float32)
+    n0 = len(x)
+    x = trim_hiss(x, text).copy()
+    m = min(len(x), int(FADE_OUT * 24000))
+    x[len(x) - m:] *= np.linspace(1.0, 0.0, m, dtype=np.float32)
+    ffmpeg([*RAW, "-i", "-", "-af", "adelay=60,apad=pad_dur=0.12", "-ac", "1", "-b:a", "96k", out], x.tobytes())
+    return f"hiss trimmed {(n0 - len(x)) / 24:.0f} ms"
+
+
 def main() -> None:
     job = json.load(open(sys.argv[1], encoding="utf-8"))
     voice = job["voice"]
     speed = float(job.get("speed", 1.0))
     pipe = KPipeline(lang_code=voice[0], repo_id="hexgrad/Kokoro-82M")
     for i, clip in enumerate(job["clips"], 1):
-        parts = [r.audio.numpy() for r in pipe(spoken(clip["text"]), voice=voice, speed=speed) if r.audio is not None]
-        if not parts:
-            raise SystemExit(f"no audio for {clip['text']!r}")
-        pcm = np.concatenate(parts).astype(np.float32)
-        # 24 kHz mono float → mp3, with leading and trailing silence trimmed and a little air added.
-        trim = "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse,adelay=60,apad=pad_dur=0.12"
-        subprocess.run(
-            ["ffmpeg", "-loglevel", "error", "-y", "-f", "f32le", "-ar", "24000", "-ac", "1", "-i", "-",
-             "-af", trim, "-ac", "1", "-b:a", "64k", clip["out"]],
-            input=pcm.tobytes(), check=True,
-        )
-        print(f"  kokoro {i}/{len(job['clips'])}: {clip['text']}", flush=True)
+        pcm = render(pipe, clip["text"], voice, speed)
+        note = encode(pcm, clip["text"], clip["out"])
+        print(f"  kokoro {i}/{len(job['clips'])}: {clip['text']} ({note})", flush=True)
 
 
 if __name__ == "__main__":
