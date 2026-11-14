@@ -132,6 +132,16 @@ export const GAMES: GameEntry[] = [
     icon: { key: 'yacht-top' },
     isNew: true,
   },
+  {
+    id: 'shipyard',
+    scene: 'Shipyard',
+    title: 'Верфь',
+    subtitle: 'Строй корабль по чертежу',
+    skills: ['space', 'english', 'math'],
+    color: 0x219ebc,
+    icon: { key: 'char-raccoon' },
+    isNew: true,
+  },
 ];
 
 export const gameById = (id: string) => GAMES.find((g) => g.id === id);

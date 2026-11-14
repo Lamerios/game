@@ -1,3 +1,4 @@
+import * as SY from '../src/games/shipyard/logic';
 import * as MP from '../src/games/mappuzzle/logic';
 import { describe, expect, it } from 'vitest';
 import content from '../content/phrases.json';
@@ -81,5 +82,31 @@ describe('mappuzzle', () => {
       }
       expect(MP.endOf(r)).toEqual(p);
     }
+  });
+});
+
+describe('shipyard', () => {
+  it('blueprints are full 6x5 grids with a hull on the bottom rows', () => {
+    for (const lvl of [1, 2, 3])
+      for (const rows of SY.BLUEPRINTS[lvl]!) {
+        const g = SY.parse(rows);
+        expect(g).toHaveLength(SY.ROWS);
+        g.forEach((r) => expect(r).toHaveLength(SY.COLS));
+        expect(g[SY.ROWS - 1]!.some(Boolean)).toBe(true);
+        expect(SY.compare(g, g).ok).toBe(true);
+        expect(SY.compare(g, SY.emptyGrid()).missing).toBeGreaterThan(3);
+      }
+  });
+  it('orders have a voiced line and are checked by colour and count', () => {
+    for (let lvl = 1; lvl <= 4; lvl++)
+      for (const o of SY.planOrders(lvl, mulberry32(lvl))) {
+        expect(ENGLISH[SY.orderLine(o)]).toBeTruthy();
+        expect(o.count).toBeGreaterThanOrEqual(1);
+      }
+    expect(SY.planOrders(1, mulberry32(1))).toEqual([]);
+    const o = { color: 'red' as const, count: 2 };
+    expect(SY.checkOrder(o, ['red', null, 'red', null, null, null]).ok).toBe(true);
+    expect(SY.checkOrder(o, ['red', 'blue', 'red', null, null, null]).ok).toBe(false);
+    expect(SY.checkOrder(o, ['red', null, null, null, null, null]).got).toBe(1);
   });
 });

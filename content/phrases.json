@@ -353,7 +353,16 @@
     "rumb.map.done": "К+арта цел+а! Тепер+ь плывём по ком+андам капит+ана.",
     "rumb.map.nav": "С+евер — вверх, юг — вниз, з+апад — вл+ево, вост+ок — впр+аво. Сл+ушай ком+анду!",
     "rumb.map.navwrong": "Не туд+а. Посмотр+и на р+озу ветр+ов.",
-    "rumb.map.treasure": "Сокр+овище н+айдено! Ты отл+ичный шт+урман!"
+    "rumb.map.treasure": "Сокр+овище н+айдено! Ты отл+ичный шт+урман!",
+    "raccoon.ship.hello": "Прив+ет, {name}! Я Б+олтик, м+астер в+ерфи. Постр+оим кор+абль? Смотр+и на чертёж и став+ь бл+оки так же. Нажм+и на цвет, пот+ом на кл+етку.",
+    "raccoon.ship.again": "Сн+ова на в+ерфь! Вот н+овый чертёж.",
+    "raccoon.ship.fix": "Почт+и! Р+озовые р+амки пок+азывают, где не так.",
+    "raccoon.ship.built": "Кор+абль гот+ов! Тепер+ь погр+узим груз.",
+    "raccoon.ship.cargo": "Сл+ушай мой прик+аз по-англ+ийски и полож+и на п+алубу ст+олько бл+оков, ск+олько я скаж+у.",
+    "raccoon.ship.ok": "Т+очно по прик+азу!",
+    "raccoon.ship.color": "Пров+ерь цвет. Сл+ушай ещё раз.",
+    "raccoon.ship.count": "Пров+ерь, ск+олько бл+оков. Сл+ушай ещё раз.",
+    "raccoon.ship.end": "Кор+абль на вод+е! Ты наст+оящий корабл+естроитель."
   },
   "numbers": {
     "nom": [
@@ -980,7 +989,27 @@
       "dir.north": "North!",
       "dir.south": "South!",
       "dir.east": "East!",
-      "dir.west": "West!"
+      "dir.west": "West!",
+      "ship.1.red": "Add one red block!",
+      "ship.1.blue": "Add one blue block!",
+      "ship.1.yellow": "Add one yellow block!",
+      "ship.1.green": "Add one green block!",
+      "ship.1.white": "Add one white block!",
+      "ship.2.red": "Add two red blocks!",
+      "ship.2.blue": "Add two blue blocks!",
+      "ship.2.yellow": "Add two yellow blocks!",
+      "ship.2.green": "Add two green blocks!",
+      "ship.2.white": "Add two white blocks!",
+      "ship.3.red": "Add three red blocks!",
+      "ship.3.blue": "Add three blue blocks!",
+      "ship.3.yellow": "Add three yellow blocks!",
+      "ship.3.green": "Add three green blocks!",
+      "ship.3.white": "Add three white blocks!",
+      "ship.4.red": "Add four red blocks!",
+      "ship.4.blue": "Add four blue blocks!",
+      "ship.4.yellow": "Add four yellow blocks!",
+      "ship.4.green": "Add four green blocks!",
+      "ship.4.white": "Add four white blocks!"
     }
   }
 }
