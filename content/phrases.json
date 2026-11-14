@@ -391,7 +391,8 @@
     "kettle.crew.tom1.blue": "Р+умб спр+ятал мон+етку в с+иний сунд+ук и улет+ел гул+ять.",
     "magpie.crew.tom2.blue": "Хи-хи! Пок+а Р+умба нет, перепр+ячу мон+етку в кр+асный сунд+ук!",
     "kettle.crew.tom.yes.blue": "Т+очно! Р+умб не в+идел Сор+оку. Он д+умает, что мон+етка в с+инем, там, где он её ост+авил.",
-    "kettle.crew.tom.no.blue": "Р+умб же не в+идел Сор+оку! Он д+умает, что мон+етка там, где он её ост+авил, в с+инем сундук+е."
+    "kettle.crew.tom.no.blue": "Р+умб же не в+идел Сор+оку! Он д+умает, что мон+етка там, где он её ост+авил, в с+инем сундук+е.",
+    "general.chess.password": "Стой! Кто ид+ёт? Наз+ови пар+оль: как +эта фиг+ура по-англ+ийски? Скаж+и вслух!"
   },
   "numbers": {
     "nom": [
@@ -1053,7 +1054,16 @@
       "emo.it.scared": "This one is scared.",
       "emo.surprised": "Surprised!",
       "emo.who.surprised": "Who is surprised?",
-      "emo.it.surprised": "This one is surprised."
+      "emo.it.surprised": "This one is surprised.",
+      "piece.k": "King",
+      "piece.q": "Queen",
+      "piece.r": "Rook",
+      "piece.b": "Bishop",
+      "piece.n": "Knight",
+      "piece.p": "Pawn",
+      "go.F": "Forward!",
+      "go.L": "Turn left!",
+      "go.R": "Turn right!"
     }
   }
 }

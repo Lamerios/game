@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { join, phrase, type PhraseId } from '../../core/phrases';
+import { voice } from '../../core/audio';
+import { english, join, phrase, type PhraseId } from '../../core/phrases';
 import { button, COLORS, FONT, H } from '../../scenes/ui';
 import type { HintStep } from '../common/attempt';
 import { MiniGameScene } from '../common/MiniGameScene';
@@ -10,6 +11,8 @@ const CELL = 60;
 const GX = 40;
 const GY = 120;
 const ARROW: Record<Cmd, string> = { F: '↑', L: '↶', R: '↷' };
+/** English names on the palette and spoken as the yacht runs the program. */
+const WORD: Record<Cmd, string> = { F: 'forward', L: 'left', R: 'right' };
 const MAX_BLOCKS_UI = 8;
 
 /**
@@ -73,9 +76,10 @@ export class CourseScene extends MiniGameScene {
     // Palette.
     const px = GX + m.w * CELL + 50;
     if (!this.debug) {
-      (['F', 'L', 'R'] as Cmd[]).forEach((c, i) =>
-        button(this, px + 50 + i * 112, GY + 40, ARROW[c], () => this.add_(c), { w: 100, h: 96 }),
-      );
+      (['F', 'L', 'R'] as Cmd[]).forEach((c, i) => {
+        const b = button(this, px + 50 + i * 112, GY + 40, ARROW[c], () => this.add_(c), { w: 100, h: 96 });
+        b.add(this.add.text(0, 36, WORD[c], { fontFamily: FONT, fontSize: '18px', color: '#ffffff' }).setOrigin(0.5));
+      });
     }
     if (this.debug) {
       this.add
@@ -102,6 +106,7 @@ export class CourseScene extends MiniGameScene {
     if (this.locked || this.running) return;
     if (this.program.length >= MAX_BLOCKS_UI) return;
     this.program.push({ cmd: c, times: 1 });
+    voice.say(english(`go.${c}`));
     this.renderStrip();
   }
 
@@ -147,7 +152,14 @@ export class CourseScene extends MiniGameScene {
     if (this.locked || this.running || this.program.length === 0) return;
     this.running = true;
     const res = run(this.map, this.program);
+    let spoken = -1;
     for (const s of res.steps.slice(1)) {
+      // Read the program aloud in English, one command per tile.
+      if (s.block !== spoken) {
+        spoken = s.block;
+        const b = this.program[s.block];
+        if (b) voice.say(english(`go.${b.cmd}`));
+      }
       this.renderStrip(s.block);
       await this.tweenTo(s.x, s.y, s.dir);
       this.coinViews.get(`${s.x},${s.y}`)?.setVisible(false);

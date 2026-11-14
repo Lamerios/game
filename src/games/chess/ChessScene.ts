@@ -1,7 +1,10 @@
 import { Chess, type Square } from 'chess.js';
 import Phaser from 'phaser';
-import { phrase, type PhraseId } from '../../core/phrases';
-import { FONT, H, W } from '../../scenes/ui';
+import { voice } from '../../core/audio';
+import { english, phrase, type PhraseId } from '../../core/phrases';
+import { recordWord } from '../../core/wordLog';
+import { button, FONT, H, W } from '../../scenes/ui';
+import { pick } from '../common/rng';
 import type { HintStep } from '../common/attempt';
 import { MiniGameScene } from '../common/MiniGameScene';
 import { generateChess, type ChessTask } from './generator';
@@ -10,6 +13,9 @@ const CELL = 80;
 const BX = 60;
 const BY = (H - 8 * CELL) / 2;
 const FILES = 'abcdefgh';
+const PIECES = ['k', 'q', 'r', 'b', 'n', 'p'] as const;
+/** The password is asked once per app start: often enough to learn, rare enough not to bore. */
+let passwordAsked = false;
 
 export class ChessScene extends MiniGameScene {
   private puzzle!: ChessTask;
@@ -44,6 +50,41 @@ export class ChessScene extends MiniGameScene {
     this.layer = this.add.container(0, 0);
     this.draw();
     this.addParrot();
+    if (passwordAsked) this.say(this.instruction());
+    else void this.password();
+  }
+
+  /** The fort guard wants a password: the English name of a piece, said aloud; a grown-up confirms. */
+  private async password() {
+    passwordAsked = true;
+    this.locked = true;
+    const piece = pick(this.rng, PIECES);
+    const id = `piece.${piece}`;
+    const layer: Phaser.GameObjects.GameObject[] = [
+      this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55).setInteractive(),
+      this.add.rectangle(W / 2, H / 2, 700, 520, 0xfffaf0).setStrokeStyle(8, 0x7a4a24),
+      this.add.text(W / 2, 140, 'Пароль для стражи', { fontFamily: FONT, fontSize: '40px', color: '#7a4a24' }).setOrigin(0.5),
+      this.add.image(W / 2, 290, `piece-w${piece}`).setDisplaySize(170, 170),
+    ];
+    let hinted = false;
+    const done = new Promise<boolean>((resolve) => {
+      layer.push(button(this, W / 2 - 160, 490, 'Сказал!', () => resolve(true), { w: 280, h: 90, color: 0x2a9d8f }));
+      layer.push(button(this, W / 2 + 160, 490, 'Подсказка', () => {
+        hinted = true;
+        voice.say(english(id));
+      }, { w: 280, h: 90, color: 0x457b9d }));
+    });
+    layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(30));
+    this.say(phrase('general.chess.password'), false);
+    const ok = await done;
+    if (!this.sys.isActive()) return;
+    // The grown-up confirms the word was said; a hint first means it wasn't recalled alone.
+    recordWord(id, ok && !hinted, 'chess');
+    layer.forEach((o) => o.destroy());
+    voice.say(english(id));
+    await this.afterSpeech(1200);
+    if (!this.sys.isActive()) return;
+    this.locked = false;
     this.say(this.instruction());
   }
 
@@ -83,6 +124,8 @@ export class ChessScene extends MiniGameScene {
     if (this.locked) return;
     const p = this.board.get(s);
     if (p && p.color === 'w') {
+      // Name the piece in English as it's picked up.
+      if (this.selected !== s) voice.say(english(`piece.${p.type}`));
       this.selected = s;
       // Show legal squares on L1–L3 only; later levels the child finds them.
       this.draw([], this.task.level <= 3 ? this.legalTargets(s) : []);
