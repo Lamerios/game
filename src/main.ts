@@ -8,6 +8,7 @@ import { HoldScene } from './games/hold/HoldScene';
 import { NoteScene } from './games/note/NoteScene';
 import { PuzzleScene } from './games/puzzle/PuzzleScene';
 import { ParcelScene } from './games/parcel/ParcelScene';
+import { RaceScene } from './games/race/RaceScene';
 import { SnakeScene } from './games/snake/SnakeScene';
 import { BootScene } from './scenes/BootScene';
 import { HarborScene } from './scenes/HarborScene';
@@ -26,7 +27,7 @@ const game = new Phaser.Game({
   backgroundColor: COLORS.night,
   antialias: true,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, HarborScene, MapScene, IslandScene, CourseScene, NoteScene, HoldScene, ChessScene, PuzzleScene, BarrelsScene, GullsScene, BuoysScene, NightScene, StoryScene, LockScene, SnakeScene, ParcelScene],
+  scene: [BootScene, HarborScene, MapScene, IslandScene, CourseScene, NoteScene, HoldScene, ChessScene, PuzzleScene, BarrelsScene, GullsScene, BuoysScene, NightScene, StoryScene, LockScene, SnakeScene, ParcelScene, RaceScene],
 });
 
 // Dev-only handle for automated play-through tests.
