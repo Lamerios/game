@@ -4,14 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { allClips, english, ENGLISH, webText } from '../src/core/phrases';
 import { mulberry32 } from '../src/games/common/rng';
 import {
-  distractors, itemsForRound, moveSnake, NUMBERS, numberOf, pickWords, placeItems, planGame, stepHead, WORDS,
+  COLORS, distractors, itemsForRound, NEW_PER_GAME, moveSnake, NUMBERS, numberOf, pickWords, placeItems, planGame, stepHead, WORDS,
 } from '../src/games/snake/logic';
 
 describe('snake', () => {
   it('every word has a picture and an English clip', () => {
     const clips = allClips([]);
     for (const w of WORDS) {
-      if (w.cat !== 'number') expect(existsSync(join(__dirname, '..', 'public', 'snake', `${w.id}.webp`)), w.id).toBe(true);
+      if (w.cat !== 'number' && w.cat !== 'color') expect(existsSync(join(__dirname, '..', 'public', 'snake', `${w.id}.webp`)), w.id).toBe(true);
       expect(clips.get(`en.${w.id}`), w.id).toBe(ENGLISH[w.id]);
     }
   });
@@ -45,18 +45,34 @@ describe('snake', () => {
     }
   });
 
-  it('picks distinct words, least practised first, and distinct distractors', () => {
+  it('a few new words per game among ones being learnt, then review', () => {
     const rng = mulberry32(9);
-    const known = Object.fromEntries(WORDS.slice(0, 20).map((w) => [w.id, 5]));
-    const words = pickWords(known, 10, rng);
-    expect(new Set(words).size).toBe(10);
-    expect(words.every((id) => !(id in known))).toBe(true);
+    const ids = WORDS.filter((w) => w.cat !== 'number').map((w) => w.id);
+    // Fresh start: ten words, basic ones first.
+    const first = planGame('words', {}, 10, rng);
+    expect(new Set(first).size).toBe(10);
+    // Some learnt, some in progress: four new, the rest from those in progress.
+    const stats: Record<string, number> = {};
+    ids.slice(0, 10).forEach((id) => (stats[id] = 5));
+    ids.slice(10, 30).forEach((id) => (stats[id] = 1));
+    const next = pickWords(stats, 10, rng, WORDS.filter((w) => w.cat !== 'number'));
+    expect(next.filter((id) => !(id in stats))).toHaveLength(NEW_PER_GAME);
+    expect(next.filter((id) => stats[id] === 1)).toHaveLength(10 - NEW_PER_GAME);
     for (let round = 0; round < 10; round++) {
       const k = itemsForRound(round) - 1;
-      const d = distractors(words[round]!, k, round, rng);
+      const d = distractors(next[round]!, k, round, rng);
       expect(d).toHaveLength(k);
-      expect(new Set([words[round], ...d]).size).toBe(k + 1);
+      expect(new Set([next[round], ...d]).size).toBe(k + 1);
     }
+  });
+
+  it('colours meet only colours', () => {
+    const rng = mulberry32(2);
+    for (const c of COLORS) {
+      expect(ENGLISH[c.id]).toBe(c.id.slice(2));
+      expect(distractors(c.id, 3, 8, rng).every((id) => id.startsWith('c-'))).toBe(true);
+    }
+    expect(distractors('apple', 3, 8, rng).some((id) => id.startsWith('c-') || numberOf(id) !== undefined)).toBe(false);
   });
 
   it('numbers: 0–20 and the tens, in English and Russian', () => {

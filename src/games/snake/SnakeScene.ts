@@ -5,7 +5,7 @@ import type { GameState } from '../../game-state';
 import { button, COLORS, FONT, H, W } from '../../scenes/ui';
 import { mulberry32, type Rng } from '../common/rng';
 import {
-  DIRS, distractors, itemsForRound, moveSnake, numberOf, OPPOSITE, placeItems, planGame, WORDS, wordById, type Cell, type Dir, type Mode,
+  COLORS as PAINTS, DIRS, distractors, itemsForRound, moveSnake, numberOf, OPPOSITE, placeItems, planGame, WORDS, wordById, type Cell, type Dir, type Mode,
 } from './logic';
 
 const CELL = 60;
@@ -32,6 +32,15 @@ function numberSvg(n: number): string {
     <path d="M30 40 C40 22 70 18 96 18" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="10" stroke-linecap="round"/>
     <text x="96" y="${92 + size * 0.36}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900"
       font-size="${size}" fill="#ffffff" stroke="#2b2d42" stroke-width="7" paint-order="stroke">${text}</text></svg>`;
+}
+
+/** A colour card: a round paint blob with drips, so it reads as "this colour", not as a thing. */
+function colorSvg(paint: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+    <path d="M96 22 C132 18 168 44 170 84 C172 112 156 128 150 146 C146 160 136 170 126 160 C118 152 120 140 108 142
+      C98 144 100 168 86 170 C72 172 74 150 62 146 C44 140 22 128 22 92 C22 54 58 24 96 22Z"
+      fill="${paint}" stroke="#2b2d42" stroke-width="7" stroke-linejoin="round"/>
+    <ellipse cx="72" cy="62" rx="22" ry="12" transform="rotate(-25 72 62)" fill="#ffffff" fill-opacity=".45"/></svg>`;
 }
 
 /** English as shown on screen ("seven", "apple"). */
@@ -107,7 +116,9 @@ export class SnakeScene extends Phaser.Scene {
     for (const w of WORDS) {
       if (this.textures.exists(`snake-${w.id}`)) continue;
       const n = numberOf(w.id);
-      if (n === undefined) this.load.image(`snake-${w.id}`, `${import.meta.env.BASE_URL}snake/${w.id}.webp`);
+      const paint = PAINTS.find((c) => c.id === w.id)?.paint;
+      if (paint) this.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(colorSvg(paint))}`);
+      else if (n === undefined) this.load.image(`snake-${w.id}`, `${import.meta.env.BASE_URL}snake/${w.id}.webp`);
       else this.load.svg(`snake-${w.id}`, `data:image/svg+xml;base64,${btoa(numberSvg(n))}`);
     }
   }
@@ -242,7 +253,7 @@ export class SnakeScene extends Phaser.Scene {
     this.card.add(
       this.add.text(70, -22, word, { fontFamily: FONT, fontSize: word.length > 9 ? '30px' : word.length > 7 ? '36px' : '48px', color: '#1b4332', fontStyle: 'bold' }).setOrigin(0.5),
     );
-    this.card.add(this.add.text(70, 36, w.ru, { fontFamily: FONT, fontSize: '28px', color: '#6c757d' }).setOrigin(0.5));
+    this.card.add(this.add.text(70, 36, w.ru, { fontFamily: FONT, fontSize: w.ru.length > 10 ? '22px' : '28px', color: '#6c757d' }).setOrigin(0.5));
     this.tweens.add({ targets: this.card, scale: { from: 0.8, to: 1 }, duration: 300, ease: 'Back.easeOut' });
   }
 
