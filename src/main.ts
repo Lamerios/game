@@ -28,6 +28,7 @@ import { WordStatsScene } from './scenes/WordStatsScene';
 import { MenuScene } from './scenes/MenuScene';
 import { analytics, startAppTracking } from './core/analytics';
 import { voice } from './core/audio';
+import { setupFullscreen } from './core/fullscreen';
 import { BUILD } from './parent/dashboard';
 import { COLORS, H, W } from './scenes/ui';
 
@@ -41,6 +42,8 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [BootScene, MenuScene, HarborScene, MapScene, IslandScene, CourseScene, NoteScene, HoldScene, ChessScene, PuzzleScene, BarrelsScene, GullsScene, BuoysScene, NightScene, StoryScene, LockScene, SnakeScene, ParcelScene, RaceScene, InverseScene, LogbookScene, AnchorScene, GalleyScene, MapPuzzleScene, ShipyardScene, CrewScene, WordStatsScene],
 });
+
+setupFullscreen();
 
 // Event log for the parent dashboard (local only). A line said by the browser voice
 // instead of a recorded clip is logged once per clip, to find gaps in the voice-over.

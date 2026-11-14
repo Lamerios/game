@@ -4,14 +4,31 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <meta name="theme-color" content="#1b4965" />
+    <!-- On a phone's home screen the game opens without the browser bars (iPhone has no fullscreen button). -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Кругосветка" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
     <title>Кругосветка юнги</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #0b2233; overflow: hidden; touch-action: none; }
-      #game { width: 100vw; height: 100vh; }
+      html, body { margin: 0; height: 100%; background: #0b2233; overflow: hidden; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+      #game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; }
+      #fs { position: fixed; z-index: 10; left: 50%; bottom: max(6px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: 46px; height: 46px; border-radius: 12px; border: 2px solid #ffffffaa; background: #0b2233aa; color: #fff; font-size: 26px; line-height: 40px; padding: 0; cursor: pointer; display: none; }
+      #fs.on { display: block; }
+      #rotate { position: fixed; inset: 0; z-index: 20; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #0b2233; color: #fff; font: 24px Nunito, "Trebuchet MS", Arial, sans-serif; text-align: center; padding: 24px; }
+      #rotate .phone { width: 70px; height: 120px; border: 6px solid #ffd166; border-radius: 14px; animation: turn 2s ease-in-out infinite; }
+      @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+      /* A phone held upright: the game is wide, ask to turn it. */
+      @media (orientation: portrait) and (pointer: coarse) and (max-width: 900px) { #rotate { display: flex; } }
     </style>
   </head>
   <body>
     <div id="game"></div>
+    <button id="fs" type="button" aria-label="Во весь экран">⛶</button>
+    <div id="rotate"><div class="phone"></div><div>Поверни телефон боком</div></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
