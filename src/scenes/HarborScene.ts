@@ -108,6 +108,9 @@ export class HarborScene extends Phaser.Scene {
     // «Кругосветная посылка»: transport and English, also outside the voyage.
     const parcel = button(this, 1125, 200, '     Посылка', () => this.scene.start('Parcel'), { w: 280, h: 90, color: 0x277da1 });
     parcel.add(this.add.text(-96, 0, 'ABC', { fontFamily: FONT, fontSize: '30px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5));
+    // «Гонка слов»: race cars and English words, also outside the voyage.
+    const race = button(this, 230, 200, '     Гонка', () => this.scene.start('Race'), { w: 280, h: 90, color: 0xe63946 });
+    race.add(this.add.text(-90, 0, 'ABC', { fontFamily: FONT, fontSize: '30px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5));
     this.add
       .text(W - 20, H - 20, 'Для родителей', { fontFamily: FONT, fontSize: '24px', color: '#ffffff', backgroundColor: '#0b2233', padding: { x: 12, y: 8 } })
       .setOrigin(1)
