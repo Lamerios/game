@@ -122,6 +122,16 @@ export const GAMES: GameEntry[] = [
     icon: { key: 'char-kettle' },
     isNew: true,
   },
+  {
+    id: 'mappuzzle',
+    scene: 'MapPuzzle',
+    title: 'Порванная карта',
+    subtitle: 'Собери карту и плыви по компасу',
+    skills: ['space', 'english'],
+    color: 0xa5683a,
+    icon: { key: 'yacht-top' },
+    isNew: true,
+  },
 ];
 
 export const gameById = (id: string) => GAMES.find((g) => g.id === id);

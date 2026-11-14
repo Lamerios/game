@@ -347,7 +347,13 @@
     "kettle.galley.switch": "Вним+ание! Н+овое пр+авило!",
     "kettle.galley.frame": "Тепер+ь хитр+ее: +если у к+арточки чёрная р+амка — клад+и по ф+орме, без р+амки — по цв+ету.",
     "kettle.galley.wrongsort": "Сл+ушай пр+авило ещё раз.",
-    "kettle.galley.end": "Камб+уз в пор+ядке! Ты держ+ал в голов+е и зак+аз, и пр+авило."
+    "kettle.galley.end": "Камб+уз в пор+ядке! Ты держ+ал в голов+е и зак+аз, и пр+авило.",
+    "rumb.map.hello": "Пир+аты порв+али к+арту сокр+овищ! Собер+и кус+очки. Нажм+и на кус+ок, чт+обы поверн+уть, и перетащ+и на м+есто.",
+    "rumb.map.rotate": "Снач+ала поверн+и кус+ок пр+авильно.",
+    "rumb.map.done": "К+арта цел+а! Тепер+ь плывём по ком+андам капит+ана.",
+    "rumb.map.nav": "С+евер — вверх, юг — вниз, з+апад — вл+ево, вост+ок — впр+аво. Сл+ушай ком+анду!",
+    "rumb.map.navwrong": "Не туд+а. Посмотр+и на р+озу ветр+ов.",
+    "rumb.map.treasure": "Сокр+овище н+айдено! Ты отл+ичный шт+урман!"
   },
   "numbers": {
     "nom": [
@@ -970,7 +976,11 @@
       "cook.need": "I need",
       "sort.color": "Sort by color!",
       "sort.shape": "Sort by shape!",
-      "sort.mixed": "Black frame: shape. No frame: color!"
+      "sort.mixed": "Black frame: shape. No frame: color!",
+      "dir.north": "North!",
+      "dir.south": "South!",
+      "dir.east": "East!",
+      "dir.west": "West!"
     }
   }
 }

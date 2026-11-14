@@ -1,3 +1,4 @@
+import * as MP from '../src/games/mappuzzle/logic';
 import { describe, expect, it } from 'vitest';
 import content from '../content/phrases.json';
 import { allClips, ENGLISH } from '../src/core/phrases';
@@ -52,5 +53,33 @@ describe('galley', () => {
     }
     expect(galley.planSort(1, rng)).toHaveLength(2);
     for (const id of ['cook.need', 'sort.color', 'sort.shape', 'sort.mixed']) expect(ENGLISH[id], id).toBeDefined();
+  });
+});
+
+describe('mappuzzle', () => {
+  it('plans every piece once, half turned when rotation is on', () => {
+    for (const lvl of [1, 2, 3, 4]) {
+      const s = MP.LEVELS[lvl]!;
+      const ps = MP.planPieces(lvl, mulberry32(lvl));
+      expect(ps.map((p) => p.index).sort((a, b) => a - b)).toEqual(Array.from({ length: s.cols * s.rows }, (_, i) => i));
+      if (!s.rotate) expect(ps.every((p) => p.turns === 0)).toBe(true);
+      else expect(ps.filter((p) => p.turns !== 0).length).toBeGreaterThanOrEqual(Math.floor(ps.length / 2));
+    }
+  });
+  it('routes stay on the grid and never cross', () => {
+    for (let seed = 1; seed < 40; seed++) {
+      const r = MP.planRoute(mulberry32(seed), 6, 6);
+      expect(r.steps).toHaveLength(6);
+      const seen = new Set<string>();
+      let p = r.start;
+      seen.add(`${p.x},${p.y}`);
+      for (const d of r.steps) {
+        p = { x: p.x + MP.STEP[d].x, y: p.y + MP.STEP[d].y };
+        expect(p.x >= 0 && p.x < 6 && p.y >= 0 && p.y < 6).toBe(true);
+        expect(seen.has(`${p.x},${p.y}`)).toBe(false);
+        seen.add(`${p.x},${p.y}`);
+      }
+      expect(MP.endOf(r)).toEqual(p);
+    }
   });
 });

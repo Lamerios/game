@@ -14,6 +14,7 @@ import { InverseScene } from './games/inverse/InverseScene';
 import { LogbookScene } from './games/logbook/LogbookScene';
 import { AnchorScene } from './games/anchor/AnchorScene';
 import { GalleyScene } from './games/galley/GalleyScene';
+import { MapPuzzleScene } from './games/mappuzzle/MapPuzzleScene';
 import { BootScene } from './scenes/BootScene';
 import { HarborScene } from './scenes/HarborScene';
 import { IslandScene } from './scenes/IslandScene';
@@ -35,7 +36,7 @@ const game = new Phaser.Game({
   backgroundColor: COLORS.night,
   antialias: true,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MenuScene, HarborScene, MapScene, IslandScene, CourseScene, NoteScene, HoldScene, ChessScene, PuzzleScene, BarrelsScene, GullsScene, BuoysScene, NightScene, StoryScene, LockScene, SnakeScene, ParcelScene, RaceScene, InverseScene, LogbookScene, AnchorScene, GalleyScene],
+  scene: [BootScene, MenuScene, HarborScene, MapScene, IslandScene, CourseScene, NoteScene, HoldScene, ChessScene, PuzzleScene, BarrelsScene, GullsScene, BuoysScene, NightScene, StoryScene, LockScene, SnakeScene, ParcelScene, RaceScene, InverseScene, LogbookScene, AnchorScene, GalleyScene, MapPuzzleScene],
 });
 
 // Event log for the parent dashboard (local only). A line said by the browser voice
