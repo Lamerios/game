@@ -1,3 +1,4 @@
+import { startRun, type Run } from './core/analytics';
 import { recordOutcome, recordReview } from './core/adaptivity';
 import { createProfile, DEFAULT_CHILD_NAME } from './core/profile';
 import { canStartSession, finishSession, isTimeUp, startSession, type Gate } from './core/session';
@@ -10,6 +11,9 @@ const PARENT_GRANT = 'parentGrant';
 
 /** Thin stateful wrapper the scenes talk to. All rules live in core/. */
 export class GameState {
+  /** Analytics run of the current voyage session (game 'voyage'). */
+  private run?: Run;
+
   private constructor(
     private readonly storage: Storage,
     public profile: Profile,
@@ -52,7 +56,11 @@ export class GameState {
       };
       await this.save();
     }
-    return this.profile.currentSession!;
+    const s = this.profile.currentSession!;
+    if (!this.run || this.run.ended) {
+      this.run = startRun('voyage', { island: s.islandIndex, episode: this.episode, resumed: s.done > 0 || !!s.crossingDone, tasks: s.tasks.length });
+    }
+    return s;
   }
 
   currentTask(): SessionTask | undefined {
@@ -76,6 +84,7 @@ export class GameState {
       skills: { ...this.profile.skills, [task.skill]: nextSkill },
       currentSession: { ...session, done: session.done + 1 },
     };
+    this.logAnswer('island', task.skill, task.level, outcome, itemId, hintsUsed, durationMs, { review: task.isReview, star: !!task.star, variant: task.variant });
     await this.storage.logAttempt({ ts: now, skill: task.skill, level: task.level, itemId, outcome, hintsUsed, durationMs });
     await this.save();
   }
@@ -90,6 +99,7 @@ export class GameState {
       skills: { ...this.profile.skills, algo: recordOutcome(st, outcome, now, this.profile.calibrating).state },
       currentSession: { ...session, crossingDone: true },
     };
+    this.logAnswer('crossing', 'algo', st.level, outcome, itemId, hintsUsed, durationMs);
     await this.storage.logAttempt({ ts: now, skill: 'algo', level: st.level, itemId, outcome, hintsUsed, durationMs });
     await this.save();
   }
@@ -104,6 +114,7 @@ export class GameState {
       skills: { ...this.profile.skills, [skill]: recordOutcome(st, outcome, now, this.profile.calibrating).state },
       currentSession: { ...session, seaDone: true },
     };
+    this.logAnswer('sea', skill, level, outcome, itemId, hintsUsed, durationMs);
     await this.storage.logAttempt({ ts: now, skill, level, itemId, outcome, hintsUsed, durationMs });
     await this.save();
   }
@@ -115,8 +126,24 @@ export class GameState {
       ...this.profile,
       skills: { ...this.profile.skills, [skill]: recordOutcome(st, outcome, now, this.profile.calibrating).state },
     };
+    this.logAnswer('extra', skill, level, outcome, itemId, hintsUsed, durationMs);
     await this.storage.logAttempt({ ts: now, skill, level, itemId, outcome, hintsUsed, durationMs });
     await this.save();
+  }
+
+  /** Every voyage task goes to the analytics log too, with its level and the hint ladder used. */
+  private logAnswer(
+    stage: string, skill: SkillId, level: number, outcome: Outcome, itemId: string, hints: number, ms: number,
+    extra: Record<string, string | number | boolean | undefined> = {},
+  ) {
+    this.run ??= startRun('voyage', { island: this.profile.route.islandIndex, resumed: true });
+    this.run.answer({ item: itemId, correct: outcome !== 'shown', firstTry: outcome === 'first_try', skill, level, hints, ms, outcome, stage, ...extra });
+  }
+
+  /** The voyage was left before the island was done (went back to the menu). */
+  leaveVoyage() {
+    this.run?.end({ completed: false, reason: 'left' });
+    this.run = undefined;
   }
 
   timeUp(now = Date.now()) {
@@ -125,7 +152,10 @@ export class GameState {
   }
 
   async finish(now = Date.now()) {
+    const island = this.profile.currentSession?.islandIndex;
     this.profile = finishSession(this.profile, now, EPISODES);
+    this.run?.end({ completed: true, island, episode: this.episode });
+    this.run = undefined;
     await this.save();
   }
 

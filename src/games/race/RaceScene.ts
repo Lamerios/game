@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
@@ -128,6 +129,8 @@ export class RaceScene extends Phaser.Scene {
   private correct = 0;
   private results: (boolean | undefined)[] = [];
   private crashes = 0;
+  /** Analytics run of the current race. */
+  private tele?: Run;
   private sincePit = 0;
   private coneHit = false;
   private coneTold = false;
@@ -258,6 +261,7 @@ export class RaceScene extends Phaser.Scene {
 
   private repeatCue() {
     if (this.talking || !this.cue) return;
+    this.tele?.event('repeat');
     voice.say(this.cue);
   }
 
@@ -317,7 +321,7 @@ export class RaceScene extends Phaser.Scene {
     this.keep(
       this.add.text(W / 2, 46, 'Гонка слов', { fontFamily: FONT, fontSize: '58px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 10 }).setOrigin(0.5),
     );
-    this.keep(button(this, 1170, 46, 'Домой', () => this.scene.start('Harbor'), { w: 170, h: 64, color: 0x6c757d }));
+    this.keep(button(this, 1170, 46, 'Домой', () => this.scene.start('Menu'), { w: 170, h: 64, color: 0x6c757d }));
     this.raccoon = this.keep(this.add.image(80, 70, 'char-raccoon').setDisplaySize(130, 130));
     this.subtitle = this.keep(
       this.add
@@ -431,6 +435,7 @@ export class RaceScene extends Phaser.Scene {
     this.track = TRACKS[idx]!;
     this.pal = PALETTES[this.track.time];
     this.rows = planRace(this.track, this.rng, this.progress.misses);
+    this.tele = startRun('race', { track: idx, car: this.progress.car, lanes: this.track.lanes, rows: this.rows.length });
     this.pos = 0;
     this.speed = 0;
     this.lane = Math.floor((this.track.lanes - 1) / 2);
@@ -495,7 +500,7 @@ export class RaceScene extends Phaser.Scene {
         .setDepth(3400)
         .setVisible(false),
     );
-    this.keep(button(this, 1180, 42, 'Домой', () => this.scene.start('Harbor'), { w: 170, h: 64, color: 0x6c757d }).setDepth(3001));
+    this.keep(button(this, 1180, 42, 'Домой', () => this.scene.start('Menu'), { w: 170, h: 64, color: 0x6c757d }).setDepth(3001));
     const listen = this.keep(button(this, 990, 42, '      Ещё', () => this.repeatCue(), { w: 180, h: 64, color: 0x2a9d8f }).setDepth(3001));
     const icon = this.add.graphics({ x: -52, y: 0 });
     icon.fillStyle(0xffffff).fillRect(-18, -9, 11, 18).fillTriangle(-8, -9, 8, -22, 8, 22).fillTriangle(-8, 9, 8, -22, 8, 22);
@@ -648,6 +653,7 @@ export class RaceScene extends Phaser.Scene {
       this.cueRepeated = false;
       if (!(await this.wait(400, run))) return;
       if (!(await this.talk(this.cue))) return;
+      this.tele?.ask(row.target, { row: i });
       const res = await new Promise<RowResult>((done) => {
         const s = this.pos + Z_SPAWN;
         row.lanes.forEach((w, l) => this.addThing({ s, x: this.laneX(l), w: 0.82, kind: 'board', obj: this.makeBoard(w, l), baseW: 240, lane: l, word: w }));
@@ -655,6 +661,7 @@ export class RaceScene extends Phaser.Scene {
       });
       if (!ok()) return;
       this.results[i] = res.ok;
+      this.tele?.answer({ item: row.target, correct: res.ok, chosen: res.ok ? undefined : res.word, row: i, speed: Math.round(this.speed * 10) / 10 });
       this.dots[i]?.setFillStyle(res.ok ? 0x38b000 : 0xe63946, 1).setStrokeStyle(3, 0xffffff);
       if (res.ok) {
         this.correct++;
@@ -868,6 +875,7 @@ export class RaceScene extends Phaser.Scene {
           this.coneHit = true;
           t.fly = { vx: (this.rng() - 0.5) * 900, vy: -700, spin: 720, t: 0 };
           this.crashFx('cone');
+          this.tele?.event('cone');
         }
       }
     }
@@ -980,6 +988,7 @@ export class RaceScene extends Phaser.Scene {
     if (!(await this.talk(this.ru('raccoon.race.pit.0'), this.ru('raccoon.race.pit.1')))) return false;
     ready = true;
     const start = this.time.now;
+    this.tele?.event('pit_stop.start', { crashes: this.crashes });
     while (this.time.now - start < total) {
       if (!(await this.wait(200, run))) return false;
       const left = Math.max(0, total - (this.time.now - start));
@@ -988,6 +997,7 @@ export class RaceScene extends Phaser.Scene {
       bar.width = 800 * (1 - left / total);
     }
     this.input.keyboard?.off('keydown', onKey);
+    this.tele?.event('pit_stop.end', { squats, ms: this.time.now - start });
     btn.destroy();
     clock.setText('Готово!');
     this.beep([523, 784, 1046], 0.12);
@@ -1013,6 +1023,7 @@ export class RaceScene extends Phaser.Scene {
     writeStore(STORE_KEY, this.progress);
     const opened = TRACKS.some((_, i) => !before[i] && unlocked(this.progress, i));
     const stars = starsFor(this.correct);
+    this.tele?.end({ completed: true, stars, score: this.correct, crashes: this.crashes, unlocked: opened });
     const d = (o: Phaser.GameObjects.GameObject) => (this.keep(o) as unknown as Phaser.GameObjects.Components.Depth).setDepth(3300);
     d(this.add.rectangle(W / 2, H / 2, W, H, 0x14213d, 0.8).setInteractive());
     d(this.add.text(W / 2, 90, 'Финиш!', { fontFamily: FONT, fontSize: '80px', color: '#ffd166', fontStyle: 'bold', stroke: '#e63946', strokeThickness: 10 }).setOrigin(0.5));
@@ -1026,7 +1037,7 @@ export class RaceScene extends Phaser.Scene {
     if (opened) d(this.add.text(W / 2, 490, 'Открыта новая трасса!', { fontFamily: FONT, fontSize: '34px', color: '#ffd166' }).setOrigin(0.5));
     d(button(this, W / 2 - 330, 610, 'Ещё раз', () => this.startRace(this.trackIdx), { w: 280, h: 96, color: 0xe63946 }));
     d(button(this, W / 2, 610, 'Трассы', () => this.showMenu(), { w: 280, h: 96, color: 0x277da1 }));
-    d(button(this, W / 2 + 330, 610, 'Домой', () => this.scene.start('Harbor'), { w: 280, h: 96, color: 0x6c757d }));
+    d(button(this, W / 2 + 330, 610, 'Домой', () => this.scene.start('Menu'), { w: 280, h: 96, color: 0x6c757d }));
     const lines = [this.ru(`raccoon.race.finish.${stars}`)];
     if (opened) lines.push(this.ru('raccoon.race.unlock'));
     void this.wait(1400).then((alive) => alive && this.talk(...lines));
