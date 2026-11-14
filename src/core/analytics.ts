@@ -10,7 +10,8 @@ import { createStore, entries, setMany, clear, delMany, keys, type UseStore } fr
  * Mini-games use one small API:
  *
  *   const run = startRun('snake', { mode: 'words' });       // a game started
- *   run.answer({ item: 'apple', correct: true, ms: 2300 });  // every answer / choice
+ *   run.ask('apple');                                       // a question (starts the answer timer)
+ *   run.answer({ item: 'apple', correct: true });            // every answer / choice
  *   run.event('hint', { step: 2 });                          // anything else worth counting
  *   run.end({ completed: true, stars: 3, score: 10 });       // finished (or left: completed false)
  *
@@ -66,6 +67,8 @@ export interface RunEnd {
 export interface Run {
   readonly id: string;
   readonly game: string;
+  /** A question was put to the child: starts the response timer for the next answer. */
+  ask(item: string, data?: EventData): void;
   answer(a: AnswerData): void;
   event(type: string, data?: EventData): void;
   end(result?: RunEnd): void;
@@ -200,6 +203,12 @@ class RunImpl implements Run {
   constructor(private readonly a: Analytics, readonly game: string, readonly id: string) {
     this.started = Date.now();
     this.lastAt = this.started;
+  }
+
+  ask(item: string, data?: EventData) {
+    if (this.ended) return;
+    this.lastAt = Date.now();
+    this.a.log(this.game, 'ask', { item, ...data }, this.id);
   }
 
   answer(x: AnswerData) {

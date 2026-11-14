@@ -41,7 +41,8 @@ export const SKILL_LABEL: Record<SkillTag, string> = {
   movement: 'Движение',
 };
 
-const BASE = import.meta.env.BASE_URL;
+// Optional chaining: the registry is also read by node tools (tools/analyze.ts), where there is no Vite env.
+const BASE: string = import.meta.env?.BASE_URL ?? './';
 
 export const GAMES: GameEntry[] = [
   {
