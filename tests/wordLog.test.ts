@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { BOX_DAYS, dueWords, planWords, readWordLog, recordWord, review, summary } from '../src/core/wordLog';
+import { BOX_DAYS, dueWords, planWords, readWordLog, recordWord, review, ruLabel, summary } from '../src/core/wordLog';
+import { loadStats } from '../src/core/wordStats';
 import { mulberry32 } from '../src/games/common/rng';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -63,5 +64,19 @@ describe('word log («Судовой журнал»)', () => {
     expect(words).toContain('a');
     expect(words.filter((w) => !['a', 'b'].includes(w))).toHaveLength(3);
     expect(new Set(words).size).toBe(5);
+  });
+});
+
+describe('one record, two books', () => {
+  beforeEach(() => localStorage.clear());
+  it('recordWord also feeds the parents’ word statistics', () => {
+    recordWord('cat', false, 'snake', Date.now(), ['dog']);
+    recordWord('cat', true, 'race');
+    recordWord('dir.north', false, 'mappuzzle');
+    const s = loadStats();
+    expect(s.cat).toMatchObject({ asked: 2, firstTry: 1, misses: 1, confused: { dog: 1 } });
+    expect(s['dir.north']).toMatchObject({ asked: 1, firstTry: 0, misses: 1, confused: {} });
+    expect(ruLabel('dir.north')).toBe('север');
+    expect(ruLabel('n12')).toBe('число 12');
   });
 });

@@ -73,7 +73,7 @@ export function addAsk(stats: WordStats, id: string, wrong: readonly string[], n
   s.asked++;
   if (wrong.length === 0) s.firstTry++;
   s.misses += wrong.length;
-  for (const w of wrong) s.confused[w] = (s.confused[w] ?? 0) + 1;
+  for (const w of wrong) if (w) s.confused[w] = (s.confused[w] ?? 0) + 1;
   s.last = now;
   return stats;
 }
