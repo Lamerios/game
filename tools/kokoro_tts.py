@@ -31,6 +31,27 @@ FADE = 0.012
 # end time, with a soft fade-out.
 TAIL = 0.07
 FADE_OUT = 0.05
+# That hiss sits inside the last word's timing, so it is also trimmed by
+# signal: frames at the end that are mostly above 4 kHz. Words that really
+# end in a hissing sound or a released p/t/k (socks, fish, cat) are left alone.
+FRICATIVES = set("szʃʒfvθðʧʤhptk")
+
+
+def trim_hiss(pcm: np.ndarray, last_phoneme: str, sr: int = 24000) -> np.ndarray:
+    if not last_phoneme or last_phoneme in FRICATIVES:
+        return pcm
+    fr = int(0.01 * sr)
+    end = len(pcm)
+    while end - fr > len(pcm) // 2:
+        seg = pcm[end - fr:end]
+        rms = float(np.sqrt((seg ** 2).mean()))
+        sp = np.abs(np.fft.rfft(seg))
+        hf = sp[np.fft.rfftfreq(fr, 1 / sr) > 4000].sum() / (sp.sum() + 1e-9)
+        if rms < 1e-4 or hf > 0.6:
+            end -= fr
+        else:
+            break
+    return pcm[:end]
 
 
 def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
@@ -50,7 +71,11 @@ def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
             j = len(pcm)
             if words:
                 j = min(len(pcm), int((words[-1].end_ts + TAIL) * 24000))
-            out = pcm[i:j].copy()
+            last = ""
+            if words and words[-1].phonemes:
+                last = [c for c in words[-1].phonemes if c.isalpha() or c in FRICATIVES][-1:]
+                last = last[0] if last else ""
+            out = trim_hiss(pcm[i:j], last).copy()
             n = min(len(out), int(FADE * 24000))
             out[:n] *= np.linspace(0.0, 1.0, n, dtype=np.float32)
             m = min(len(out), int(FADE_OUT * 24000))
