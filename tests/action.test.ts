@@ -149,3 +149,19 @@ describe('where the action stages go', () => {
     expect(phrase('barrels.intro', { n: 7 }).show).toContain('ровно 7');
   });
 });
+
+describe('buoys: find the mistake', () => {
+  it('from level 4 the last row has exactly one wrong buoy at the gap', async () => {
+    const { generateBuoys, sameBuoy } = await import('../src/games/action/generators');
+    const { mulberry32 } = await import('../src/games/common/rng');
+    const rng = mulberry32(11);
+    for (let i = 0; i < 200; i++) {
+      const t = generateBuoys(4 + (i % 3), rng);
+      const r = t.rounds[2]!;
+      expect(r.error).toBeDefined();
+      expect(sameBuoy(r.error!, r.row[r.gap]!)).toBe(false);
+      expect(sameBuoy(r.options[r.answer]!, r.row[r.gap]!)).toBe(true);
+      expect(generateBuoys(3, rng).rounds.some((x) => x.error)).toBe(false);
+    }
+  });
+});

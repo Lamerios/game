@@ -87,3 +87,30 @@ export function setLevel(state: SkillState, level: number): SkillState {
   const clamped = Math.min(state.maxLevel, Math.max(1, Math.round(level)));
   return { ...state, level: clamped, window: [] };
 }
+
+/**
+ * Faster rule for the short action stages (barrels, gulls, buoys): three clean
+ * wins in a row → next level, two shown solutions in a row → one level back.
+ * Keeps the child near the ~85 % sweet spot (Wilson et al., 2019) without
+ * waiting for a full window of six. Falls back to the usual rule otherwise.
+ */
+export function recordFastOutcome(
+  state: SkillState,
+  outcome: Outcome,
+  now: number,
+  calibrating = false,
+): { state: SkillState; change: LevelChange } {
+  const window = [...state.window, outcome].slice(-WINDOW_SIZE);
+  const last = window.slice(-3);
+  if (last.length === 3 && last.every((o) => o === 'first_try') && state.level < state.maxLevel) {
+    return {
+      state: { ...state, level: state.level + 1, window: [], lastPlayedAt: now, reviewQueue: [...state.reviewQueue, scheduleReview(state.level, 0, now)] },
+      change: 'up',
+    };
+  }
+  const two = window.slice(-2);
+  if (two.length === 2 && two.every((o) => o === 'shown') && state.level > 1) {
+    return { state: { ...state, level: state.level - 1, window: [], lastPlayedAt: now }, change: 'down' };
+  }
+  return recordOutcome(state, outcome, now, calibrating);
+}

@@ -133,3 +133,19 @@ export function parseProgress(raw: unknown): Progress {
   const trips = Number.isInteger(p?.trips) && p!.trips! >= 0 ? p!.trips! : 0;
   return { leg, trips };
 }
+
+// ---------- route plan ----------
+
+/**
+ * From the second trip round the world the child plans the whole route first:
+ * one transport per leg, then the plan is "run" and stops where it breaks, to
+ * be fixed (planning ahead and debugging a sequence).
+ */
+export function planOptions(leg: Leg, rng: Rng): Vehicle[] {
+  return shuffle(rng, [leg.answer, ...shuffle(rng, leg.wrong).slice(0, 2)]);
+}
+
+/** Index of the first leg the plan gets wrong (or not chosen), -1 when the whole plan works. */
+export function checkPlan(plan: readonly (Vehicle | undefined)[]): number {
+  return LEGS.findIndex((leg, i) => plan[i] !== leg.answer);
+}
