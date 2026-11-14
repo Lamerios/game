@@ -9,6 +9,8 @@ import { mulberry32, pick, type Rng } from '../common/rng';
 import { MAX_LEVEL, other, pickStory, planEmotions, scoreTom, shuffledFrames, type Chest, type Emotion, type EmotionTrial, type Story } from './logic';
 
 const KEY = 'crew-progress';
+/** Who each situation is about, so the picture matches the story. */
+const SIT_HERO: Record<string, string> = { gift: 'raccoon', cake: 'walrus', balloon: 'rumb', rain: 'kettle', icecream: 'walrus', tower: 'raccoon', noise: 'rumb', octopus: 'kettle' };
 const FACE_COLORS = [0xffd166, 0x8ecae6, 0xf4a261, 0xb5e48c];
 
 /** A round cartoon face showing one feeling. Drawn around (0,0), radius r. */
@@ -139,7 +141,7 @@ export class CrewScene extends Phaser.Scene {
     this.clear();
     this.answerNow = t.emo;
     const intro: Utterance[] = t.kind === 'word' ? [english(`emo.who.${t.emo}`)] : [phrase(`rumb.crew.sit.${t.sit}` as PhraseId), phrase('rumb.crew.feel')];
-    if (t.kind === 'situation') this.keep(this.add.image(W / 2, 170, 'char-rumb').setDisplaySize(150, 150));
+    if (t.kind === 'situation') this.keep(this.add.image(W / 2, 170, `char-${SIT_HERO[t.sit] ?? 'rumb'}`).setDisplaySize(150, 150));
     else this.keep(this.add.text(W / 2, 170, '?', { fontFamily: FONT, fontSize: '110px', color: '#3d2b1f' }).setOrigin(0.5));
     const colors = [...FACE_COLORS];
     const zones: Phaser.GameObjects.Zone[] = [];
