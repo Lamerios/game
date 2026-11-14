@@ -338,7 +338,16 @@
     "rumb.anchor.more": "Н+ужно б+ыло д+альше, бл+иже к конц+у.",
     "rumb.anchor.less": "Н+ужно б+ыло бл+иже к нул+ю.",
     "rumb.anchor.end": "Ты ч+увствуешь ч+исла всё л+учше!",
-    "rumb.anchor.levelup": "Сл+едующая л+ента б+удет длинн+ее!"
+    "rumb.anchor.levelup": "Сл+едующая л+ента б+удет длинн+ее!",
+    "kettle.galley.hello": "Я кок Пыхт+елкин! Запомн+и мой зак+аз по-англ+ийски и принес+и всё на подн+ос.",
+    "kettle.galley.listen": "Сл+ушай зак+аз!",
+    "kettle.galley.ok": "Всё по зак+азу! Спас+ибо!",
+    "kettle.galley.order": "И д+аже по пор+ядку! Ты насто+ящий кок!",
+    "kettle.galley.sort": "Тепер+ь разлож+и груз в трюм. Сл+ушай пр+авило!",
+    "kettle.galley.switch": "Вним+ание! Н+овое пр+авило!",
+    "kettle.galley.frame": "Тепер+ь хитр+ее: +если у к+арточки чёрная р+амка — клад+и по ф+орме, без р+амки — по цв+ету.",
+    "kettle.galley.wrongsort": "Сл+ушай пр+авило ещё раз.",
+    "kettle.galley.end": "Камб+уз в пор+ядке! Ты держ+ал в голов+е и зак+аз, и пр+авило."
   },
   "numbers": {
     "nom": [
@@ -957,7 +966,11 @@
       "n65": "sixty-five",
       "n75": "seventy-five",
       "n85": "eighty-five",
-      "n95": "ninety-five"
+      "n95": "ninety-five",
+      "cook.need": "I need",
+      "sort.color": "Sort by color!",
+      "sort.shape": "Sort by shape!",
+      "sort.mixed": "Black frame: shape. No frame: color!"
     }
   }
 }
