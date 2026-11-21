@@ -6,7 +6,7 @@ import { mulberry32 } from '../src/games/common/rng';
 import { PICTURES } from '../src/games/snake/logic';
 import {
   BOOST_AFTER, boosterTask, boostSteps, CARS, englishLines, freshProgress, isFlawless, landingOptions, LINE_MAX, makeMaze, mazeDistances, mazeSize,
-  nextCar, nitroPrice, numberWords, parseProgress, planRace, poolOf, PRAISE_LINES, recordRace, ROWS_PER_RACE, starsFor, STARTER_CARS, TRACKS, unlocked,
+  isPractice, LEVEL_RULES, levelStats, nextCar, nitroPrice, practiceCoins, withLevel, numberWords, parseProgress, planRace, poolOf, PRAISE_LINES, recordRace, ROWS_PER_RACE, starsFor, STARTER_CARS, TRACKS, unlocked,
   type RaceOutcome,
 } from '../src/games/race/logic';
 
@@ -123,6 +123,47 @@ describe('race', () => {
     expect(p.coins).toBe(CARS.length * (ROWS_PER_RACE + 5));
     // a car won is kept and can be chosen
     expect(parseProgress({ ...p, car: 'gold' }).car).toBe('gold');
+  });
+
+  it('gives cars and full coins only on the child\'s own track and harder ones', () => {
+    const clean = outcome({ correct: ROWS_PER_RACE });
+    let p = { ...freshProgress(), level: 2 };
+    expect(isPractice(p, 0)).toBe(true);
+    expect(isPractice(p, 2)).toBe(false);
+    // practice: half the coins, no car, no flawless bonus
+    let r = recordRace(p, 0, clean);
+    expect(r.practice).toBe(true);
+    expect(r.newCar).toBeUndefined();
+    expect(r.coins).toBe(practiceCoins(ROWS_PER_RACE));
+    expect(r.coins).toBe(6);
+    expect(r.progress.cars).toEqual(p.cars);
+    // own track and above: the car and the bonus
+    r = recordRace(p, 2, clean);
+    expect(r.practice).toBe(false);
+    expect(r.newCar).toBeDefined();
+    expect(r.coins).toBe(ROWS_PER_RACE + 5);
+    r = recordRace(p, 3, clean);
+    expect(r.newCar).toBeDefined();
+    // the level opens tracks and survives a save
+    expect(unlocked(p, 2)).toBe(true);
+    expect(unlocked(p, 3)).toBe(false);
+    p = withLevel(p, 5);
+    expect(p.level).toBe(4);
+    expect(parseProgress(JSON.parse(JSON.stringify(p))).level).toBe(4);
+    expect(withLevel(p, 0).level).toBe(0);
+  });
+
+  it('guesses the level of an old save from three-star tracks', () => {
+    expect(parseProgress({ stars: [3, 1, 0, 0, 0] }).level).toBe(1);
+    expect(parseProgress({ stars: [2, 0, 0, 0, 0] }).level).toBe(0);
+    expect(parseProgress({ stars: [3, 3, 3, 3, 3] }).level).toBe(TRACKS.length - 1);
+    expect(parseProgress({ stars: [3, 0, 0, 0, 0], level: 0 }).level).toBe(0);
+    expect(parseProgress({ level: 99 }).level).toBe(TRACKS.length - 1);
+  });
+
+  it('counts cones and booster answers in the smart-level stats', () => {
+    expect(levelStats(outcome({ correct: 12, bumps: 2 }), 5, 6)).toEqual({ right: 17, total: 20 });
+    expect(LEVEL_RULES.maxLevel).toBe(TRACKS.length);
   });
 
   it('opens the plane after the car tracks', () => {
