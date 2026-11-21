@@ -1,5 +1,6 @@
 import { carSvg } from './race/art';
 import { CARS } from './race/logic';
+import { weaponSvg } from './range/art';
 import { MACHINE_ICON } from './machine/art';
 import { CABINS_ICON } from './cabins/art';
 
@@ -172,6 +173,16 @@ export const GAMES: GameEntry[] = [
     skills: ['english', 'logic', 'memory'],
     color: 0xe76f51,
     icon: { key: 'char-magpie' },
+    isNew: true,
+  },
+  {
+    id: 'range',
+    scene: 'Range',
+    title: 'Тир Пломбира',
+    subtitle: 'Попади в нужную цель',
+    skills: ['english', 'math', 'logic', 'space'],
+    color: 0x9d4edd,
+    icon: { key: 'menu-range', svg: weaponSvg('cannon') },
     isNew: true,
   },
 ];
