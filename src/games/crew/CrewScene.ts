@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { levelLog, levelNote, nextLevelSmart, statsFromRun } from '../../core/smartLevel';
 import { startRun, track, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, phrase, type PhraseId, type Utterance } from '../../core/phrases';
@@ -357,7 +358,8 @@ export class CrewScene extends Phaser.Scene {
   private finish() {
     this.clear();
     const acc = this.total ? this.right / this.total : 0;
-    const next = acc >= 0.85 ? Math.min(MAX_LEVEL, this.level + 1) : acc < 0.5 ? Math.max(1, this.level - 1) : this.level;
+    const d = nextLevelSmart('crew', this.level, statsFromRun(this.run, this.right, this.total), { maxLevel: MAX_LEVEL, up: 0.85, down: 0.5, drop: 0.3 });
+    const next = d.level;
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}');
       localStorage.setItem(KEY, JSON.stringify({ ...saved, level: next }));
@@ -365,11 +367,12 @@ export class CrewScene extends Phaser.Scene {
       /* private mode */
     }
     const stars = acc >= 0.85 ? 3 : acc >= 0.6 ? 2 : 1;
-    this.run?.end({ completed: true, stars, score: this.right, total: this.total, levelChange: next - this.level });
+    this.run?.end({ completed: true, stars, score: this.right, total: this.total, ...levelLog(d) });
     this.run = undefined;
     this.keep(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.45).setInteractive());
     this.keep(this.add.rectangle(W / 2, H / 2, 760, 420, 0xfffaf0).setStrokeStyle(8, 0x7a4a24));
     this.keep(this.add.text(W / 2, 200, 'Команда тобой гордится!', { fontFamily: FONT, fontSize: '44px', color: '#7a4a24' }).setOrigin(0.5));
+    this.keep(this.add.text(W / 2, 370, levelNote(this.level, d), { fontFamily: FONT, fontSize: '30px', color: d.change > 0 ? '#2a9d8f' : '#7a4a24' }).setOrigin(0.5));
     for (let i = 0; i < 3; i++) this.keep(this.add.star(W / 2 - 110 + i * 110, 300, 5, 22, 48, i < stars ? 0xffd166 : 0xdee2e6).setStrokeStyle(4, 0x3d2b1f));
     this.keep(button(this, W / 2 - 170, 440, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));
     this.keep(button(this, W / 2 + 170, 440, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));

@@ -72,6 +72,7 @@ track('menu', 'menu.pick', { game: 'snake' });      // разовое событ
 | любая | ask | item, … | задан вопрос |
 | любая | answer | item, correct, firstTry, chosen, ms, level, skill, hints, … | ответ |
 | любая | run.end | completed, answers, correct, items, durationMs, stars, score, reason | конец игры |
+| игры с умным уровнем | run.end | levelChange (−2…+2), levelReason (skip, up, steady, stay, shaky, down, drop), newLevel, medMs, fast, slow | почему сменился уровень, см. docs/smart-level.md |
 | snake | repeat | item | «Ещё раз» |
 | parcel | answer.kind | vehicle / load (why: color / many / few) | выбор транспорта и погрузка |
 | parcel | magpie | shooed | прогнал сороку или нет |

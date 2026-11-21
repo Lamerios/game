@@ -186,4 +186,4 @@ export function nextLevel(level: number, s: number): number {
 
 /** English direction word for a move, said as the boat slides. */
 export const dirWord = (b: Boat, delta: number) =>
-  b.dir === 'h' ? (delta < 0 ? 'cmd.left' : 'cmd.right') : delta < 0 ? 'cmd.up' : 'cmd.down';
+  b.dir === 'h' ? (delta < 0 ? 'race.left' : 'race.right') : delta < 0 ? 'dir.up' : 'dir.down';

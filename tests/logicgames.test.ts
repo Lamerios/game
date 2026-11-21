@@ -47,7 +47,7 @@ describe('jam (harbour sliding puzzle)', () => {
     expect(jam.stars(5, 3, 2)).toBe(1);
     expect(jam.nextLevel(2, 3)).toBe(3);
     expect(jam.nextLevel(2, 1)).toBe(1);
-    for (const w of ['cmd.left', 'cmd.right', 'cmd.up', 'cmd.down']) expect(ENGLISH[w]).toBeDefined();
+    for (const w of ['race.left', 'race.right', 'dir.up', 'dir.down']) expect(ENGLISH[w]).toBeDefined();
     for (const id of ['hello', 'back', 'again', 'think', 'show', 'best', 'ok', 'stuck', 'end']) expect(ph[`rumb.jam.${id}`], id).toBeDefined();
   });
 });
