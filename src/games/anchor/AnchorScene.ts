@@ -6,7 +6,7 @@ import { recordWord } from '../../core/wordLog';
 import { button, FONT, H, W } from '../../scenes/ui';
 import { goHome } from '../common/home';
 import { mulberry32, type Rng } from '../common/rng';
-import { LEVELS, nextLevel, numberWord, pae, planTargets, ROUNDS, verdict } from './logic';
+import { LEVELS, migrateLevel, nextLevel, numberWord, pae, planRounds, ROUNDS, verdict, type Round } from './logic';
 
 const KEY = 'anchor-progress';
 const LINE_Y = 300;
@@ -15,15 +15,14 @@ const X1 = 1140;
 
 function readLevel(): number {
   try {
-    const v = Number(JSON.parse(localStorage.getItem(KEY) ?? '{}').level);
-    return v >= 1 && v <= 4 ? v : 1;
+    return migrateLevel(JSON.parse(localStorage.getItem(KEY) ?? '{}'));
   } catch {
     return 1;
   }
 }
 function writeLevel(level: number) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ level }));
+    localStorage.setItem(KEY, JSON.stringify({ level, v: 2 }));
   } catch {
     /* private mode */
   }
@@ -33,7 +32,7 @@ function writeLevel(level: number) {
 export class AnchorScene extends Phaser.Scene {
   private rng!: Rng;
   private level = 1;
-  private targets: number[] = [];
+  private rounds: Round[] = [];
   private round = 0;
   private errors: number[] = [];
   private run?: Run;
@@ -50,7 +49,7 @@ export class AnchorScene extends Phaser.Scene {
   create() {
     this.rng = mulberry32(Date.now() & 0xffffffff);
     this.level = readLevel();
-    this.targets = planTargets(this.level, this.rng);
+    this.rounds = planRounds(this.level, this.rng);
     this.round = 0;
     this.errors = [];
     this.marks = [];
@@ -61,7 +60,7 @@ export class AnchorScene extends Phaser.Scene {
     this.ship = this.add.image(X0, LINE_Y - 70, 'yacht-side').setDisplaySize(150, 138).setDepth(4);
     this.add.image(90, 640, 'char-rumb').setDisplaySize(120, 120);
     button(this, 1190, 40, 'Домой', () => this.leave(), { w: 160, h: 64, color: 0x6c757d });
-    this.add.text(40, 40, `Якорь · уровень ${this.level}`, { fontFamily: FONT, fontSize: '30px', color: '#fff', stroke: '#0b2233', strokeThickness: 6 }).setOrigin(0, 0.5);
+    this.add.text(40, 40, `Якорь · уровень ${this.level} · 0–${LEVELS[this.level]!.max}`, { fontFamily: FONT, fontSize: '30px', color: '#fff', stroke: '#0b2233', strokeThickness: 6 }).setOrigin(0, 0.5);
     // Tap anywhere along the line.
     const zone = this.add.zone(X0 - 30, LINE_Y - 120, X1 - X0 + 60, 260).setOrigin(0).setInteractive({ useHandCursor: true });
     zone.on('pointerup', (p: Phaser.Input.Pointer) => this.drop(p.x));
@@ -94,6 +93,11 @@ export class AnchorScene extends Phaser.Scene {
     g.lineStyle(6, 0x1b4965).lineBetween(X0, LINE_Y - 22, X0, LINE_Y + 22).lineBetween(X1, LINE_Y - 22, X1, LINE_Y + 22);
     this.add.text(X0, LINE_Y + 48, '0', { fontFamily: FONT, fontSize: '40px', color: '#fff', stroke: '#0b2233', strokeThickness: 6 }).setOrigin(0.5);
     this.add.text(X1, LINE_Y + 48, String(this.max), { fontFamily: FONT, fontSize: '40px', color: '#fff', stroke: '#0b2233', strokeThickness: 6 }).setOrigin(0.5);
+    // Landmark ticks: a hint on a new, longer line.
+    for (const m of LEVELS[this.level]!.landmarks) {
+      g.lineStyle(5, 0x1b4965).lineBetween(this.xOf(m), LINE_Y - 18, this.xOf(m), LINE_Y + 18);
+      this.add.text(this.xOf(m), LINE_Y + 44, String(m), { fontFamily: FONT, fontSize: '30px', color: '#e0fbfc', stroke: '#0b2233', strokeThickness: 5 }).setOrigin(0.5);
+    }
   }
 
   private async talk(...lines: Utterance[]): Promise<boolean> {
@@ -109,12 +113,14 @@ export class AnchorScene extends Phaser.Scene {
 
   private async start() {
     const first = !localStorage.getItem(KEY);
-    if (!(await this.talk(phrase(first ? 'rumb.anchor.hello' : 'rumb.anchor.again')))) return;
+    const lines = [phrase(first ? 'rumb.anchor.hello' : 'rumb.anchor.again')];
+    if (LEVELS[this.level]!.landmarks.length) lines.push(phrase('rumb.anchor.marks'));
+    if (!(await this.talk(...lines))) return;
     void this.ask();
   }
 
   private target() {
-    return this.targets[this.round]!;
+    return this.rounds[this.round]!.target;
   }
 
   private big?: Phaser.GameObjects.Text;
@@ -123,6 +129,7 @@ export class AnchorScene extends Phaser.Scene {
     this.marks.forEach((m) => m.destroy());
     this.marks = [];
     this.big?.destroy();
+    if (this.rounds[this.round]!.kind === 'name') return this.askName();
     const t = this.target();
     this.big = this.add.text(W / 2, 140, String(t), { fontFamily: FONT, fontSize: '96px', color: '#ffd166', stroke: '#0b2233', strokeThickness: 10 }).setOrigin(0.5);
     this.add.tween({ targets: this.big, scale: { from: 0.4, to: 1 }, duration: 300, ease: 'Back.easeOut' });
@@ -142,7 +149,12 @@ export class AnchorScene extends Phaser.Scene {
     this.errors.push(p);
     this.run?.answer({ item: `${t}/${this.max}`, correct: v !== 'far', guess: Math.round(guess * 10) / 10, pae: Math.round(p * 10) / 10, ms: Date.now() - this.askedAt, level: this.level, skill: 'number_line' });
     recordWord(numberWord(t), v !== 'far', 'anchor');
-    // The ship sails there and drops the anchor.
+    await this.dropAnchor(cx);
+    await this.reveal(t, v, guess);
+  }
+
+  /** The ship sails to x and drops the anchor there. */
+  private async dropAnchor(cx: number) {
     await new Promise((r) => this.tweens.add({ targets: this.ship, x: cx, duration: 600, ease: 'Sine.easeInOut', onComplete: r }));
     const chain = this.add.graphics().setDepth(3);
     chain.lineStyle(4, 0x3d2b1f).lineBetween(cx, LINE_Y - 20, cx, LINE_Y + 150);
@@ -150,15 +162,22 @@ export class AnchorScene extends Phaser.Scene {
     anchor.lineStyle(7, 0x3d2b1f).strokeCircle(0, -34, 9).lineBetween(0, -25, 0, 22).lineBetween(-16, -12, 16, -12);
     anchor.beginPath().arc(0, 0, 24, 0.2, Math.PI - 0.2).strokePath();
     this.marks.push(chain, anchor);
+  }
+
+  /** The truth: the right place with ticks to count by, then the next round. */
+  private async reveal(t: number, v: ReturnType<typeof verdict>, guess: number, extra: Utterance[] = []) {
     // Then the truth: the right place with ticks to count by.
     const tx = this.xOf(t);
     const g = this.add.graphics().setDepth(5);
-    const step = this.max <= 20 ? 1 : 10;
-    for (let k = 0; k <= this.max; k += step) g.lineStyle(3, 0x1b4965, 0.8).lineBetween(this.xOf(k), LINE_Y - 14, this.xOf(k), LINE_Y + 14);
+    const step = this.max <= 40 ? 1 : 10;
+    for (let k = 0; k <= this.max; k += step) {
+      const ten = k % 10 === 0;
+      g.lineStyle(ten ? 4 : 2, 0x1b4965, ten ? 0.9 : 0.6).lineBetween(this.xOf(k), LINE_Y - (ten ? 18 : 10), this.xOf(k), LINE_Y + (ten ? 18 : 10));
+    }
     g.fillStyle(0x2a9d8f).fillCircle(tx, LINE_Y, 16).lineStyle(4, 0xffffff).strokeCircle(tx, LINE_Y, 16);
     const label = this.add.text(tx, LINE_Y - 56, String(t), { fontFamily: FONT, fontSize: '36px', color: '#2a9d8f', backgroundColor: '#ffffff', padding: { x: 8, y: 2 } }).setOrigin(0.5).setDepth(6);
     this.marks.push(g, label);
-    const lines: Utterance[] = [phrase(`rumb.anchor.${v}`)];
+    const lines: Utterance[] = [...extra, phrase(`rumb.anchor.${v}`)];
     if (v === 'far') lines.push(phrase(guess < t ? 'rumb.anchor.more' : 'rumb.anchor.less'));
     if (!(await this.talk(...lines))) return;
     await new Promise((r) => this.time.delayedCall(700, r));
@@ -166,6 +185,37 @@ export class AnchorScene extends Phaser.Scene {
     this.round++;
     if (this.round >= ROUNDS) return this.finish();
     void this.ask();
+  }
+
+  /** Turned around: the anchor is already down; which of three numbers is it? */
+  private async askName() {
+    const r = this.rounds[this.round]!;
+    const t = r.target;
+    this.big = this.add.text(W / 2, 140, '?', { fontFamily: FONT, fontSize: '96px', color: '#ffd166', stroke: '#0b2233', strokeThickness: 10 }).setOrigin(0.5);
+    await this.dropAnchor(this.xOf(t));
+    if (!this.sys.isActive()) return;
+    this.askedAt = Date.now();
+    const chosen = await new Promise<number | null>((resolve) => {
+      this.events.once('shutdown', () => resolve(null));
+      (r.options ?? [t]).forEach((n, i) => {
+        const b = button(this, W / 2 + (i - 1) * 260, 610, String(n), () => {
+          voice.say(english(numberWord(n)));
+          resolve(n);
+        }, { w: 220, h: 100, color: 0x277da1 });
+        this.marks.push(b);
+      });
+      void this.talk(phrase('rumb.anchor.which'));
+    });
+    if (chosen === null || !this.sys.isActive()) return;
+    this.marks.filter((m) => m instanceof Phaser.GameObjects.Container).forEach((m) => m.destroy());
+    const p = pae(t, chosen, this.max);
+    const v = chosen === t ? 'exact' : verdict(p) === 'exact' ? 'close' : verdict(p);
+    this.errors.push(p);
+    this.run?.answer({ item: `name:${t}/${this.max}`, correct: chosen === t, chosen: String(chosen), pae: Math.round(p * 10) / 10, ms: Date.now() - this.askedAt, level: this.level, skill: 'number_line_reverse' });
+    recordWord(numberWord(t), chosen === t, 'anchor');
+    this.big?.destroy();
+    await new Promise((res) => this.time.delayedCall(600, res));
+    await this.reveal(t, v, chosen, chosen === t ? [] : [english(numberWord(t))]);
   }
 
   private finish() {
