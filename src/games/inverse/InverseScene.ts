@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { levelLog, levelNote, nextLevelSmart, statsFromRun } from '../../core/smartLevel';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
@@ -8,7 +9,7 @@ import { goHome } from '../common/home';
 import { mulberry32, type Rng } from '../common/rng';
 import { DECK_BG, YUNGA } from './art';
 import {
-  bodyLine, dirLine, expected, freshProgress, isRight, LEVELS, parseProgress, planGame, recordGame, starsFor, STORM_LINE,
+  bodyLine, dirLine, expected, freshProgress, isRight, LEVELS, MAX_LEVEL, parseProgress, planGame, recordGame, starsFor, STORM_LINE,
   type Dir, type Flag, type Progress, type Step,
 } from './logic';
 
@@ -439,9 +440,13 @@ export class InverseScene extends Phaser.Scene {
 
   private finishGame() {
     const stars = starsFor(this.right, this.scored);
-    const { progress, change } = recordGame(this.progress, this.right, this.scored);
+    const from = this.progress.level;
+    const d = nextLevelSmart(GAME, from, statsFromRun(this.run, this.right, this.scored), { maxLevel: MAX_LEVEL, up: 0.9, down: 0.65 });
+    const counted = recordGame(this.progress, this.right, this.scored).progress;
+    const progress = { ...counted, level: d.level, recent: d.change ? [] : counted.recent };
+    const change = d.change > 0 ? 'up' : d.change < 0 ? 'down' : 'none';
     writeProgress(progress);
-    this.run?.end({ completed: true, stars, score: this.right, total: this.scored, level: this.progress.level, levelChange: change });
+    this.run?.end({ completed: true, stars, score: this.right, total: this.scored, level: from, ...levelLog(d), levelChange: change });
     this.run = undefined;
     this.setFlag('white');
 
@@ -450,6 +455,7 @@ export class InverseScene extends Phaser.Scene {
       this.add.rectangle(W / 2, H / 2, 820, 520, 0xfffaf0).setStrokeStyle(8, 0x1b4965),
       this.add.text(W / 2, 170, 'Служба окончена!', { fontFamily: FONT, fontSize: '50px', color: '#1b4965' }).setOrigin(0.5),
       this.add.text(W / 2, 330, `Верно: ${this.right} из ${this.scored}`, { fontFamily: FONT, fontSize: '36px', color: '#3d2b1f' }).setOrigin(0.5),
+      this.add.text(W / 2, 390, levelNote(from, d), { fontFamily: FONT, fontSize: '30px', color: d.change > 0 ? '#2a9d8f' : '#7a4a24' }).setOrigin(0.5),
     ];
     for (let i = 0; i < 3; i++) {
       const s = this.add.star(W / 2 - 110 + i * 110, 250, 5, 22, 48, i < stars ? 0xffd166 : 0xdee2e6).setStrokeStyle(4, 0x3d2b1f);

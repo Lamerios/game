@@ -73,6 +73,14 @@ export interface Run {
   event(type: string, data?: EventData): void;
   end(result?: RunEnd): void;
   readonly ended: boolean;
+  /** Ответы этой игры по порядку: с первой ли попытки и за сколько мс (для умного уровня). */
+  results(): readonly AnswerResult[];
+}
+
+export interface AnswerResult {
+  correct: boolean;
+  firstTry: boolean;
+  ms: number;
 }
 
 const SCHEMA = 1;
@@ -199,6 +207,7 @@ class RunImpl implements Run {
   private lastAt: number;
   private seen = new Set<string>();
   private missed = new Set<string>();
+  private tape: AnswerResult[] = [];
 
   constructor(private readonly a: Analytics, readonly game: string, readonly id: string) {
     this.started = Date.now();
@@ -219,8 +228,14 @@ class RunImpl implements Run {
     this.seen.add(x.item);
     this.answers++;
     if (x.correct) this.right++;
-    this.a.log(this.game, 'answer', { ...x, firstTry, ms: x.ms ?? now - this.lastAt }, this.id);
+    const ms = x.ms ?? now - this.lastAt;
+    this.tape.push({ correct: x.correct, firstTry, ms });
+    this.a.log(this.game, 'answer', { ...x, firstTry, ms }, this.id);
     this.lastAt = now;
+  }
+
+  results(): readonly AnswerResult[] {
+    return this.tape;
   }
 
   event(type: string, data?: EventData) {

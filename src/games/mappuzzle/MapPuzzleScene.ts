@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { levelLog, levelNote, nextLevelSmart, statsFromRun } from '../../core/smartLevel';
 import { OL, svg } from '../../art/objects';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
@@ -237,19 +238,23 @@ export class MapPuzzleScene extends Phaser.Scene {
 
   private finish(right: number, total: number) {
     const clean = this.misdrops <= 1 && right === total;
-    const next = clean ? Math.min(MAX_LEVEL, this.level + 1) : right < total / 2 ? Math.max(1, this.level - 1) : this.level;
+    // The torn map counts as one task (right with at most one misdrop), each compass step as one more.
+    const stats = statsFromRun(this.run, right + (this.misdrops <= 1 ? 1 : 0), total + 1);
+    const d = nextLevelSmart('mappuzzle', this.level, stats, { maxLevel: MAX_LEVEL, up: 1, down: 0.5, drop: 0.25 });
+    const next = d.level;
     try {
       localStorage.setItem(KEY, JSON.stringify({ level: next }));
     } catch {
       /* private mode */
     }
     const stars = clean ? 3 : right >= total - 1 ? 2 : 1;
-    this.run?.end({ completed: true, stars, score: right, total, misdrops: this.misdrops, levelChange: next - this.level });
+    this.run?.end({ completed: true, stars, score: right, total, misdrops: this.misdrops, ...levelLog(d) });
     this.run = undefined;
     const layer: Phaser.GameObjects.GameObject[] = [
       this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.45).setInteractive(),
       this.add.rectangle(W / 2, H / 2, 760, 420, 0xfffaf0).setStrokeStyle(8, 0xa5683a),
       this.add.text(W / 2, 200, 'Сокровище найдено!', { fontFamily: FONT, fontSize: '50px', color: '#a5683a' }).setOrigin(0.5),
+      this.add.text(W / 2, 370, levelNote(this.level, d), { fontFamily: FONT, fontSize: '30px', color: d.change > 0 ? '#2a9d8f' : '#7a4a24' }).setOrigin(0.5),
     ];
     for (let i = 0; i < 3; i++) layer.push(this.add.star(W / 2 - 110 + i * 110, 300, 5, 22, 48, i < stars ? 0xffd166 : 0xdee2e6).setStrokeStyle(4, 0x3d2b1f));
     layer.push(button(this, W / 2 - 170, 440, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));

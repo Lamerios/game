@@ -29,25 +29,50 @@ export function recordOutcome(
   calibrating = false,
 ): { state: SkillState; change: LevelChange } {
   const window = [...state.window, outcome].slice(-WINDOW_SIZE);
-  let next: SkillState = { ...state, window, lastPlayedAt: now };
+  const next: SkillState = { ...state, window, lastPlayedAt: now };
+
+  // Three shown solutions in a row: too hard right now, no need to wait for a full window.
+  if (window.length >= EARLY_DOWN_RUN && window.slice(-EARLY_DOWN_RUN).every((o) => o === 'shown') && state.level > 1) {
+    return { state: levelDown(next, state), change: 'down' };
+  }
 
   const needed = calibrating ? MIN_SAMPLES_CALIBRATION : MIN_SAMPLES;
   if (window.length < needed) return { state: next, change: 'none' };
 
   const s = score(window);
   if (s > LEVEL_UP_THRESHOLD && state.level < state.maxLevel) {
-    next = {
-      ...next,
-      level: state.level + 1,
-      window: [],
-      reviewQueue: [...next.reviewQueue, scheduleReview(state.level, 0, now)],
-    };
-    return { state: next, change: 'up' };
+    return { state: levelUp(next, state, window, now), change: 'up' };
   }
   if (s < LEVEL_DOWN_THRESHOLD && state.level > 1) {
-    return { state: { ...next, level: state.level - 1, window: [] }, change: 'down' };
+    return { state: levelDown(next, state), change: 'down' };
   }
   return { state: next, change: 'none' };
+}
+
+/** Three shown solutions in a row → one level back at once. */
+export const EARLY_DOWN_RUN = 3;
+
+/**
+ * Level up. A flawless window (every task first try) right after another
+ * flawless level-up means the child is racing through: skip a level instead
+ * of walking every step (smart difficulty, 2026-11-21).
+ */
+function levelUp(next: SkillState, state: SkillState, window: readonly Outcome[], now: number): SkillState {
+  const flawless = window.every((o) => o === 'first_try');
+  const momentum = state.momentum ?? 0;
+  const step = flawless && momentum >= 1 ? 2 : 1;
+  const level = Math.min(state.maxLevel, state.level + step);
+  return {
+    ...next,
+    level,
+    window: [],
+    momentum: flawless ? momentum + 1 : 0,
+    reviewQueue: [...next.reviewQueue, scheduleReview(state.level, 0, now)],
+  };
+}
+
+function levelDown(next: SkillState, state: SkillState): SkillState {
+  return { ...next, level: state.level - 1, window: [], momentum: 0 };
 }
 
 function scheduleReview(level: number, step: number, now: number) {
@@ -85,7 +110,7 @@ export function recordReview(
 /** Manual level override from the parent panel. Clears the window. */
 export function setLevel(state: SkillState, level: number): SkillState {
   const clamped = Math.min(state.maxLevel, Math.max(1, Math.round(level)));
-  return { ...state, level: clamped, window: [] };
+  return { ...state, level: clamped, window: [], momentum: 0 };
 }
 
 /**
@@ -101,16 +126,14 @@ export function recordFastOutcome(
   calibrating = false,
 ): { state: SkillState; change: LevelChange } {
   const window = [...state.window, outcome].slice(-WINDOW_SIZE);
+  const next: SkillState = { ...state, window, lastPlayedAt: now };
   const last = window.slice(-3);
   if (last.length === 3 && last.every((o) => o === 'first_try') && state.level < state.maxLevel) {
-    return {
-      state: { ...state, level: state.level + 1, window: [], lastPlayedAt: now, reviewQueue: [...state.reviewQueue, scheduleReview(state.level, 0, now)] },
-      change: 'up',
-    };
+    return { state: levelUp(next, state, window, now), change: 'up' };
   }
   const two = window.slice(-2);
   if (two.length === 2 && two.every((o) => o === 'shown') && state.level > 1) {
-    return { state: { ...state, level: state.level - 1, window: [], lastPlayedAt: now }, change: 'down' };
+    return { state: levelDown(next, state), change: 'down' };
   }
   return recordOutcome(state, outcome, now, calibrating);
 }
