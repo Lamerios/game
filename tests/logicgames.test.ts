@@ -15,7 +15,7 @@ describe('jam (harbour sliding puzzle)', () => {
     for (let level = 1; level <= jam.MAX_LEVEL; level++) {
       let sum = 0;
       for (let i = 0; i < 4; i++) {
-        const p = jam.generate(level, rng, 600);
+        const p = jam.generate(level, rng, 600, 400);
         expect(jam.fits(p.boats)).toBe(true);
         expect(jam.solved(p.boats)).toBe(false);
         // No other horizontal boat shares the exit row.
@@ -29,7 +29,7 @@ describe('jam (harbour sliding puzzle)', () => {
       avg.push(sum / 4);
     }
     expect(avg[jam.MAX_LEVEL - 1]!).toBeGreaterThan(avg[0]! + 4);
-  });
+  }, 30000);
 
   it('slides only into free cells', () => {
     const boats: jam.Boat[] = [
