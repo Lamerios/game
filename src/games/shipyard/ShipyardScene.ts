@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { levelLog, levelNote, nextLevelSmart, statsFromRun } from '../../core/smartLevel';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, phrase, type Utterance } from '../../core/phrases';
@@ -7,7 +8,7 @@ import { button, FONT, H, W } from '../../scenes/ui';
 import { goHome } from '../common/home';
 import { mulberry32, type Rng } from '../common/rng';
 import {
-  BLOCKS, checkOrder, COLS, compare, emptyGrid, MAX_LEVEL, nextLevel, orderLine, PAINT, pickBlueprint, planOrders, ROWS, type Block, type Grid, type Order,
+  BLOCKS, checkOrder, COLS, compare, emptyGrid, MAX_LEVEL, orderLine, PAINT, pickBlueprint, planOrders, ROWS, type Block, type Grid, type Order,
 } from './logic';
 
 const KEY = 'shipyard-progress';
@@ -266,18 +267,23 @@ export class ShipyardScene extends Phaser.Scene {
     this.clear();
     const clean = this.checks === 1 && this.ordersRight === this.ordersTotal;
     const poor = this.checks > 3 || (this.ordersTotal > 0 && this.ordersRight === 0);
-    const next = nextLevel(this.level, clean, poor);
+    // The blueprint counts as one task (right when built on the first check), each order as one more.
+    const stats = statsFromRun(this.run, this.ordersRight + (this.checks === 1 ? 1 : 0), this.ordersTotal + 1);
+    const d = nextLevelSmart('shipyard', this.level, stats, { maxLevel: MAX_LEVEL, up: 1, down: 0.5, drop: 0.2 });
+    // A blueprint that took many checks is never a step up.
+    const next = poor ? Math.min(d.level, Math.max(1, this.level - 1)) : d.level;
     try {
       localStorage.setItem(KEY, JSON.stringify({ level: next }));
     } catch {
       /* private mode */
     }
     const stars = clean ? 3 : poor ? 1 : 2;
-    this.run?.end({ completed: true, stars, checks: this.checks, score: this.ordersRight, total: this.ordersTotal, levelChange: next - this.level });
+    this.run?.end({ completed: true, stars, checks: this.checks, score: this.ordersRight, total: this.ordersTotal, ...levelLog(d), levelChange: next - this.level, newLevel: next });
     this.run = undefined;
     this.keep(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.45).setInteractive());
     this.keep(this.add.rectangle(W / 2, H / 2, 760, 420, 0xfffaf0).setStrokeStyle(8, 0x7a4a24));
     this.keep(this.add.text(W / 2, 200, 'Корабль на воде!', { fontFamily: FONT, fontSize: '50px', color: '#7a4a24' }).setOrigin(0.5));
+    this.keep(this.add.text(W / 2, 370, levelNote(this.level, { level: next, change: next - this.level, reason: d.reason }), { fontFamily: FONT, fontSize: '30px', color: next > this.level ? '#2a9d8f' : '#7a4a24' }).setOrigin(0.5));
     for (let i = 0; i < 3; i++) this.keep(this.add.star(W / 2 - 110 + i * 110, 300, 5, 22, 48, i < stars ? 0xffd166 : 0xdee2e6).setStrokeStyle(4, 0x3d2b1f));
     this.keep(button(this, W / 2 - 170, 440, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));
     this.keep(button(this, W / 2 + 170, 440, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));

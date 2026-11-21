@@ -28,8 +28,36 @@ function plate(n: number, x = 200, y = 182) {
     <text x="${x}" y="${y + 10}" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="28" text-anchor="middle" fill="${OL}">${n}</text>`;
 }
 
+/** Stickers and lights over a car's body: siren, chequers, flames, stars. */
+function deco(c: Car): string {
+  const top = c.shape === 'super' ? 40 : c.shape === 'rally' ? 30 : c.shape === 'buggy' ? 34 : 16;
+  switch (c.deco) {
+    case 'siren':
+      return `<rect x="150" y="${top - 26}" width="100" height="22" rx="8" fill="#2b2d42"/>
+        <rect x="154" y="${top - 23}" width="44" height="16" rx="6" fill="#e63946"/><rect x="202" y="${top - 23}" width="44" height="16" rx="6" fill="#3a86ff"/>
+        <ellipse cx="176" cy="${top - 15}" rx="40" ry="18" fill="#e63946" opacity=".3"/><ellipse cx="224" cy="${top - 15}" rx="40" ry="18" fill="#3a86ff" opacity=".3"/>`;
+    case 'checker': {
+      let r = '';
+      for (let i = 0; i < 12; i++) r += `<rect x="${86 + i * 19}" y="${(i % 2) * 9 + 196}" width="19" height="9" fill="#2b2d42"/>`;
+      return r;
+    }
+    case 'flames':
+      return `<path d="M120 200 C130 180 128 170 140 160 C142 176 150 178 156 168 C160 182 168 186 176 176 C178 190 172 200 168 206Z" fill="#ffbe0b" stroke="#e85d04" stroke-width="4"/>
+        <path d="M280 200 C270 180 272 170 260 160 C258 176 250 178 244 168 C240 182 232 186 224 176 C222 190 228 200 232 206Z" fill="#ffbe0b" stroke="#e85d04" stroke-width="4"/>`;
+    case 'stars':
+      return [120, 280].map((x) => `<path d="M${x} 170 l6 12 13 2 -10 9 3 13 -12 -7 -12 7 3 -13 -10 -9 13 -2Z" fill="#fff" stroke="#2b2d42" stroke-width="3"/>`).join('');
+    default:
+      return '';
+  }
+}
+
 /** A race car from behind, as the child sees his own car. */
 export function carSvg(c: Car): string {
+  const svg = carBody(c);
+  return c.deco ? svg.replace(/<\/svg>$/, `${deco(c)}</svg>`) : svg;
+}
+
+function carBody(c: Car): string {
   const b = c.body;
   const d = c.dark;
   const shadow = `<ellipse cx="200" cy="244" rx="190" ry="15" fill="#000" opacity=".35"/>`;
@@ -246,3 +274,75 @@ export const WRENCH = s(120, 120, `<path d="M30 96 L74 52 C66 30 82 10 104 14 L8
 export const STAR = s(120, 120, `<path d="M60 8 L75 42 L112 46 L84 70 L92 108 L60 88 L28 108 L36 70 L8 46 L45 42Z" fill="#ffd166" ${S}/>
   <path d="M44 48 L58 22" stroke="#fff" stroke-opacity=".6" stroke-width="7" stroke-linecap="round"/>`);
 export const STAR_OFF = s(120, 120, `<path d="M60 8 L75 42 L112 46 L84 70 L92 108 L60 88 L28 108 L36 70 L8 46 L45 42Z" fill="#adb5bd" opacity=".6" ${S}/>`);
+
+
+// ---------- the plane, seen from behind ----------
+
+export const PLANE_W = 420;
+export const PLANE_H = 260;
+
+/** A small propeller plane from behind in the car's colours: wings, tail fin, the spinning propeller around the nose. */
+export function planeSvg(c: Car): string {
+  const b = c.body;
+  const d = c.dark;
+  return s(PLANE_W, PLANE_H, `
+    <ellipse cx="210" cy="150" rx="74" ry="74" fill="#ffffff" opacity=".28"/>
+    <ellipse cx="210" cy="150" rx="74" ry="74" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="4" stroke-dasharray="14 10"/>
+    <path d="M14 150 C14 136 24 130 40 130 L380 130 C396 130 406 136 406 150 C406 162 396 166 380 166 L40 166 C24 166 14 162 14 150Z" fill="${b}" ${S}/>
+    <path d="M30 140 H180" stroke="#fff" stroke-opacity=".5" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="44" cy="150" r="7" fill="#e63946"/><circle cx="376" cy="150" r="7" fill="#38b000"/>
+    <circle cx="210" cy="150" r="46" fill="${b}" ${S}/>
+    <circle cx="210" cy="150" r="22" fill="${d}" ${S}/>
+    <path d="M190 128 C198 118 214 116 226 122" stroke="#fff" stroke-opacity=".5" stroke-width="7" stroke-linecap="round" fill="none"/>
+    <path d="M130 120 H290 L276 104 H144Z" fill="${d}" ${S}/>
+    <path d="M200 112 L210 20 L222 20 L222 112Z" fill="${b}" ${S}/>
+    <path d="M204 108 L212 36" stroke="#fff" stroke-opacity=".5" stroke-width="5" stroke-linecap="round"/>
+    <text x="214" y="86" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="26" text-anchor="middle" fill="#fff" stroke="${OL}" stroke-width="2">${c.number}</text>
+    <path d="M196 196 L190 236 M224 196 L230 236" stroke="${OL}" stroke-width="8"/>
+    <ellipse cx="188" cy="238" rx="12" ry="10" fill="#1f1f24" ${S}/><ellipse cx="232" cy="238" rx="12" ry="10" fill="#1f1f24" ${S}/>`);
+}
+
+/** A colour card: a round paint blob, so it reads as "this colour", not as a thing. */
+export function colorBlobSvg(paint: string): string {
+  return s(160, 160, `<path d="M80 14 C118 14 146 40 146 78 C146 104 134 112 132 128 C130 146 116 150 112 134 C108 120 98 140 84 146 C66 152 70 132 56 136 C36 142 14 118 14 82 C14 42 42 14 80 14Z"
+    fill="${paint}" stroke="${OL}" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M48 46 C58 36 72 32 84 32" stroke="#fff" stroke-opacity=".55" stroke-width="9" stroke-linecap="round" fill="none"/>`);
+}
+
+/** A storm cloud with lightning: the plane's cone. */
+export const STORM = s(260, 190, `
+  <path d="M40 120 C8 120 8 76 44 74 C46 36 96 24 118 54 C134 20 196 22 202 64 C240 60 262 92 244 120Z" fill="#495057" ${S}/>
+  <path d="M60 84 C70 66 90 60 104 64" stroke="#adb5bd" stroke-width="8" stroke-linecap="round" fill="none"/>
+  <path d="M120 116 L100 154 H124 L110 186 L156 140 H132 L146 116Z" fill="#ffd60a" ${S}/>`);
+
+/** A small island with a palm, seen from the plane far above. */
+export const ISLAND = s(300, 140, `
+  <ellipse cx="150" cy="112" rx="140" ry="26" fill="#7dd3fc" opacity=".6"/>
+  <ellipse cx="150" cy="104" rx="118" ry="24" fill="#f4d58d" ${S}/>
+  <path d="M150 100 C148 70 152 50 160 34" stroke="#8d5524" stroke-width="12" stroke-linecap="round" fill="none"/>
+  <path d="M160 34 C130 20 108 30 100 44 M160 34 C190 18 214 28 220 44 M160 34 C150 10 170 0 184 8 M160 34 C134 36 124 54 126 64" stroke="#2a9d8f" stroke-width="14" stroke-linecap="round" fill="none"/>`);
+
+export const SHIP = s(220, 120, `
+  <path d="M14 70 H206 L184 108 H40Z" fill="#e63946" ${S}/>
+  <rect x="60" y="34" width="90" height="36" fill="#fff" ${S}/>
+  <rect x="130" y="10" width="22" height="30" fill="#2b2d42" ${S}/>
+  <circle cx="84" cy="52" r="7" fill="#7dd3fc"/><circle cx="110" cy="52" r="7" fill="#7dd3fc"/>`);
+
+export const COIN = s(100, 100, `<circle cx="50" cy="50" r="44" fill="#ffc300" ${S}/><circle cx="50" cy="50" r="30" fill="#ffd60a" stroke="#e09f3e" stroke-width="5"/>
+  <text x="50" y="62" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="34" text-anchor="middle" fill="#e09f3e">$</text>
+  <path d="M26 34 C32 24 42 18 52 18" stroke="#fff" stroke-opacity=".7" stroke-width="7" stroke-linecap="round" fill="none"/>`);
+
+export const NITRO = s(100, 140, `
+  <rect x="34" y="6" width="32" height="18" rx="4" fill="#adb5bd" ${S}/>
+  <rect x="18" y="22" width="64" height="112" rx="18" fill="#3a86ff" ${S}/>
+  <path d="M50 46 C40 62 34 72 40 88 C44 98 56 100 62 90 C68 78 60 66 64 56 C58 62 54 60 50 46Z" fill="#ffbe0b" stroke="#e85d04" stroke-width="4"/>
+  <path d="M30 40 V110" stroke="#fff" stroke-opacity=".5" stroke-width="7" stroke-linecap="round"/>`);
+
+export const PART = s(120, 120, `<circle cx="60" cy="60" r="40" fill="#adb5bd" ${S}/><circle cx="60" cy="60" r="16" fill="#495057" ${S}/>
+  ${Array.from({ length: 8 }, (_, i) => `<rect x="52" y="6" width="16" height="22" rx="3" fill="#adb5bd" ${S} transform="rotate(${i * 45} 60 60)"/>`).join('')}
+  <circle cx="60" cy="60" r="16" fill="#495057" ${S}/>`);
+
+export const GARAGE = s(140, 120, `
+  <path d="M10 50 L70 10 L130 50 V114 H10Z" fill="#e63946" ${S}/>
+  <rect x="34" y="62" width="72" height="52" fill="#dee2e6" ${S}/>
+  <path d="M34 76 H106 M34 90 H106 M34 104 H106" stroke="#adb5bd" stroke-width="5"/>`);

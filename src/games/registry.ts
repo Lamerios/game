@@ -1,6 +1,7 @@
 import { carSvg } from './race/art';
 import { CARS } from './race/logic';
-import { YUNGA } from './inverse/art';
+import { MACHINE_ICON } from './machine/art';
+import { CABINS_ICON } from './cabins/art';
 
 /**
  * Every game on the main menu. To add a game: add its scene to main.ts and one
@@ -28,7 +29,7 @@ export interface GameEntry {
   hidden?: boolean;
 }
 
-export type SkillTag = 'english' | 'reading' | 'math' | 'logic' | 'chess' | 'attention' | 'memory' | 'space' | 'movement';
+export type SkillTag = 'english' | 'reading' | 'math' | 'logic' | 'chess' | 'attention' | 'memory' | 'space' | 'movement' | 'cause';
 
 export const SKILL_LABEL: Record<SkillTag, string> = {
   english: 'English',
@@ -40,6 +41,7 @@ export const SKILL_LABEL: Record<SkillTag, string> = {
   memory: 'Память',
   space: 'Пространство',
   movement: 'Движение',
+  cause: 'Причины',
 };
 
 // Optional chaining: the registry is also read by node tools (tools/analyze.ts), where there is no Vite env.
@@ -54,6 +56,36 @@ export const GAMES: GameEntry[] = [
     skills: ['reading', 'math', 'logic', 'chess'],
     color: 0x1b4965,
     icon: { key: 'yacht-side' },
+  },
+  {
+    id: 'jam',
+    scene: 'Jam',
+    title: 'Затор в гавани',
+    subtitle: 'Выведи яхту из гавани',
+    skills: ['space', 'logic'],
+    color: 0x0077b6,
+    icon: { key: 'yacht-top' },
+    isNew: true,
+  },
+  {
+    id: 'machine',
+    scene: 'Machine',
+    title: 'Машина Болтика',
+    subtitle: 'Куда покатится шарик?',
+    skills: ['cause', 'logic', 'space'],
+    color: 0xb5651d,
+    icon: { key: 'menu-machine', svg: MACHINE_ICON },
+    isNew: true,
+  },
+  {
+    id: 'cabins',
+    scene: 'Cabins',
+    title: 'Кто в какой каюте?',
+    subtitle: 'Загадки команды',
+    skills: ['logic', 'space'],
+    color: 0x6a4c93,
+    icon: { key: 'menu-cabins', svg: CABINS_ICON },
+    isNew: true,
   },
   {
     id: 'snake',
@@ -81,16 +113,6 @@ export const GAMES: GameEntry[] = [
     skills: ['english', 'movement'],
     color: 0xe63946,
     icon: { key: 'menu-race', svg: carSvg(CARS[0]!) },
-  },
-  {
-    id: 'inverse',
-    scene: 'Inverse',
-    title: 'Наоборот, юнга!',
-    subtitle: 'Команды и флаги',
-    skills: ['english', 'attention', 'movement'],
-    color: 0x9b5de5,
-    icon: { key: 'menu-inverse', svg: YUNGA },
-    isNew: true,
   },
   {
     id: 'logbook',

@@ -72,10 +72,16 @@ track('menu', 'menu.pick', { game: 'snake' });      // разовое событ
 | любая | ask | item, … | задан вопрос |
 | любая | answer | item, correct, firstTry, chosen, ms, level, skill, hints, … | ответ |
 | любая | run.end | completed, answers, correct, items, durationMs, stars, score, reason | конец игры |
+| игры с умным уровнем | run.end | levelChange (−2…+2), levelReason (skip, up, steady, stay, shaky, down, drop), newLevel, medMs, fast, slow | почему сменился уровень, см. docs/smart-level.md |
 | snake | repeat | item | «Ещё раз» |
 | parcel | answer.kind | vehicle / load (why: color / many / few) | выбор транспорта и погрузка |
 | parcel | magpie | shooed | прогнал сороку или нет |
 | race | answer.speed, cone, pit_stop.start, pit_stop.end (squats, ms), repeat | | гонка |
+| jam | ask / answer | item jam.<уровень>, min (кратчайший путь), moves, hints, stars | «Затор в гавани»: гавань решена; moves − min показывает, насколько ребёнок планирует |
+| jam | move, hint | boat, delta, moves / step | каждый сдвиг лодки, подсказка попугая (1 — какая лодка, 2 — ход сделан за него) |
+| machine | answer | item predict.1 / twice.1 / twice.2 / bell, chosen (чашка), attempt, turns | «Машина Болтика»: предсказание и проверка; twice.2 — понял ли, что вертушка меняет путь |
+| cabins | ask / answer | item cabins.<уровень>, clues, attempt, broken (сколько подсказок не выполнено) | «Кто в какой каюте?» |
+| cabins | hint | who | после второй ошибки один герой заселён за ребёнка |
 | voyage | answer.stage | island / crossing / sea / extra, outcome, review, star, variant | задачи плавания |
 | voyage | harbor.open | allowed, reason, episode | экран Кругосветки (видно, когда упирается в лимит) |
 | voyage | parent.grant | | родитель разрешил ещё плавание |
