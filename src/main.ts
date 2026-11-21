@@ -10,7 +10,6 @@ import { PuzzleScene } from './games/puzzle/PuzzleScene';
 import { ParcelScene } from './games/parcel/ParcelScene';
 import { RaceScene } from './games/race/RaceScene';
 import { SnakeScene } from './games/snake/SnakeScene';
-import { InverseScene } from './games/inverse/InverseScene';
 import { LogbookScene } from './games/logbook/LogbookScene';
 import { AnchorScene } from './games/anchor/AnchorScene';
 import { GalleyScene } from './games/galley/GalleyScene';
@@ -40,7 +39,7 @@ const game = new Phaser.Game({
   backgroundColor: COLORS.night,
   antialias: true,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MenuScene, HarborScene, MapScene, IslandScene, CourseScene, NoteScene, HoldScene, ChessScene, PuzzleScene, BarrelsScene, GullsScene, BuoysScene, NightScene, StoryScene, LockScene, SnakeScene, ParcelScene, RaceScene, InverseScene, LogbookScene, AnchorScene, GalleyScene, MapPuzzleScene, ShipyardScene, CrewScene, WordStatsScene],
+  scene: [BootScene, MenuScene, HarborScene, MapScene, IslandScene, CourseScene, NoteScene, HoldScene, ChessScene, PuzzleScene, BarrelsScene, GullsScene, BuoysScene, NightScene, StoryScene, LockScene, SnakeScene, ParcelScene, RaceScene, LogbookScene, AnchorScene, GalleyScene, MapPuzzleScene, ShipyardScene, CrewScene, WordStatsScene],
 });
 
 setupFullscreen();
