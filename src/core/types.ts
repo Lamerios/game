@@ -20,6 +20,8 @@ export interface SkillState {
   reviewQueue: Review[];
   /** Epoch ms of the last task in this skill, 0 if never played. */
   lastPlayedAt: number;
+  /** How many level-ups in a row were flawless (every task first try). Two in a row → skip a level. */
+  momentum?: number;
 }
 
 export interface Settings {

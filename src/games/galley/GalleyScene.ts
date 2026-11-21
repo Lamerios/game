@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { levelLog, levelNote, nextLevelSmart, statsFromRun } from '../../core/smartLevel';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, join, phrase, type Utterance } from '../../core/phrases';
@@ -8,7 +9,7 @@ import { goHome } from '../common/home';
 import { mulberry32, type Rng } from '../common/rng';
 import { preloadWordPictures } from '../snake/SnakeScene';
 import {
-  BINS, binFor, checkTray, FOODS, nextLevel, planOrders, planSort, ruleOf, type Card, type OrderRound, type SortPhase,
+  BINS, binFor, checkTray, FOODS, MAX_LEVEL, planOrders, planSort, ruleOf, type Card, type OrderRound, type SortPhase,
 } from './logic';
 
 const KEY = 'galley-progress';
@@ -221,18 +222,20 @@ export class GalleyScene extends Phaser.Scene {
   private finish() {
     this.clear();
     const acc = this.total ? this.right / this.total : 0;
-    const next = nextLevel(this.level, acc);
+    const d = nextLevelSmart('galley', this.level, statsFromRun(this.run, this.right, this.total), { maxLevel: MAX_LEVEL, up: 0.9, down: 0.6 });
+    const next = d.level;
     try {
       localStorage.setItem(KEY, JSON.stringify({ level: next }));
     } catch {
       /* private mode */
     }
     const stars = acc >= 0.9 ? 3 : acc >= 0.7 ? 2 : 1;
-    this.run?.end({ completed: true, stars, score: this.right, total: this.total, levelChange: next - this.level });
+    this.run?.end({ completed: true, stars, score: this.right, total: this.total, ...levelLog(d) });
     this.run = undefined;
     this.keep(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.5).setInteractive());
     this.keep(this.add.rectangle(W / 2, H / 2, 760, 440, 0xfffaf0).setStrokeStyle(8, 0x7a4a24));
     this.keep(this.add.text(W / 2, 190, 'Камбуз в порядке!', { fontFamily: FONT, fontSize: '50px', color: '#7a4a24' }).setOrigin(0.5));
+    this.keep(this.add.text(W / 2, 370, levelNote(this.level, d), { fontFamily: FONT, fontSize: '30px', color: d.change > 0 ? '#2a9d8f' : '#7a4a24' }).setOrigin(0.5));
     for (let i = 0; i < 3; i++) this.keep(this.add.star(W / 2 - 110 + i * 110, 290, 5, 22, 48, i < stars ? 0xffd166 : 0xdee2e6).setStrokeStyle(4, 0x3d2b1f));
     this.keep(button(this, W / 2 - 170, 450, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));
     this.keep(button(this, W / 2 + 170, 450, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
