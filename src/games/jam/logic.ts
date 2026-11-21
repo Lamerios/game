@@ -154,13 +154,16 @@ function randomBoats(rng: Rng, others: number): Boat[] | null {
 
 /**
  * A puzzle whose shortest solution falls in the level's range; if none is found
- * within the budget, the closest one found (harder levels are rare at random).
+ * within the budget (tries or time), the closest one found (harder levels are rare at random).
  */
-export function generate(level: number, rng: Rng, budget = 1500): Puzzle {
+export function generate(level: number, rng: Rng, budget = 1500, maxMs = 900): Puzzle {
+  const until = Date.now() + maxMs;
   const L = LEVELS[Math.max(1, Math.min(MAX_LEVEL, level))]!;
   let best: Puzzle | null = null;
   const miss = (m: number) => (m < L.moves[0] ? L.moves[0] - m : m > L.moves[1] ? m - L.moves[1] : 0);
   for (let i = 0; i < budget; i++) {
+    // On a slow phone, stop looking and take the closest puzzle found so far.
+    if (best && Date.now() > until) break;
     const boats = randomBoats(rng, int(rng, L.boats[0], L.boats[1]));
     if (!boats || solved(boats)) continue;
     const sol = solve(boats, 20000);
