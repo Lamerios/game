@@ -5,15 +5,17 @@ import { recordWord } from '../../core/wordLog';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
 import type { GameState } from '../../game-state';
 import { button, FONT, H, W } from '../../scenes/ui';
-import { mulberry32, pick, type Rng } from '../common/rng';
-import { numberOf, PICTURES } from '../snake/logic';
+import { mulberry32, pick, shuffle, type Rng } from '../common/rng';
+import { COLORS, numberOf, PICTURES } from '../snake/logic';
 import {
-  ARCH, BILLBOARD, CAR_H, CAR_W, carSvg, CLOUD, CONE, houseSvg, lampSvg, MOON, PALETTES, skylineSvg, STAR, STAR_OFF, SUN, TRAFFIC_LIGHT, TREE,
-  WRENCH, type Palette,
+  ARCH, BILLBOARD, CAR_H, CAR_W, carSvg, CLOUD, COIN, colorBlobSvg, CONE, GARAGE, houseSvg, ISLAND, lampSvg, MOON, NITRO, PALETTES, PART, PLANE_H, PLANE_W,
+  planeSvg, SHIP, skylineSvg, STAR, STAR_OFF, STORM, SUN, TRAFFIC_LIGHT, TREE, WRENCH, type Palette,
 } from './art';
+import { runGarage } from './garage';
+import { runPitStop } from './pitstop';
 import {
-  BOOST_AFTER, boosterPair, carLine, CARS, CRASHES_TO_PIT, landingOptions, LINE_MAX, freshProgress, parseProgress, PIT_MS, planRace, PRAISE_LINES, recordRace, ROWS_PER_RACE, SQUATS, starsFor,
-  TRACKS, unlocked, type CarId, type Progress, type Row, type Track,
+  BOOST_AFTER, boosterTask, boostSteps, carById, carLine, CARS, CRASHES_TO_PIT, FLAWLESS_BONUS, isFlawless, landingOptions, LINE_MAX, freshProgress, parseProgress, planRace, PRAISE_LINES,
+  recordRace, ROWS_PER_RACE, starsFor, TRACKS, unlocked, type BoostTask, type Card, type Progress, type Row, type Track,
 } from './logic';
 
 const STORE_KEY = 'race-progress';
@@ -44,6 +46,16 @@ const CAR_Y = 700;
 const SLOW_Z = 18;
 const SLOW = 0.75;
 const LANE_COLORS = [0x3a86ff, 0xf77f00, 0x8338ec, 0x06d6a0];
+/** Plane: distance between the two card heights, and how far below the sea is. */
+const ALT_STEP = 1.1;
+const SEA_Y = -5;
+/** The plane's camera sits higher above it than the car's, so the cards ahead stay in sight. */
+const PLANE_CAM = 1.3;
+/** Plane cards are smaller than road boards so two heights fit with their balloons. */
+const AIR_W = 0.6;
+const PLANE_PX = 330;
+/** Nitro: seconds of full speed and a bit more. */
+const NITRO_S = 3;
 
 interface Thing {
   /** Position along the road. */
@@ -55,7 +67,11 @@ interface Thing {
   /** Natural size of obj, for scaling. */
   baseW: number;
   kind: 'scenery' | 'board' | 'cone' | 'arch';
+  /** Height above the road (plane cards and clouds). */
+  y?: number;
   lane?: number;
+  /** Height step of a plane card or storm cloud. */
+  h?: number;
   word?: string;
   gone?: boolean;
   /** A cone already passed the car. */
@@ -67,6 +83,7 @@ interface Thing {
 }
 
 type RowResult = { ok: true; word: string } | { ok: false; word: string };
+export type { Thing };
 
 function readStore<T>(key: string, fallback: T): T {
   try {
@@ -93,19 +110,14 @@ function mix(c1: number, c2: number, t: number): number {
   return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
 }
 
-/** Pit-stop length; `?pit=5` in the address makes it 5 seconds (for grown-ups testing). */
-function pitMs(): number {
-  const q = Number(new URLSearchParams(location.search).get('pit'));
-  return Number.isFinite(q) && q > 0 ? q * 1000 : PIT_MS;
-}
-
 /**
  * «Гонка слов»: pick a race car, then drive through the city seen from behind
  * the car. The voice says an English word; word boards stand across the lanes;
  * drive into the right one (left/right to change lanes, up/down for speed).
  * A wrong board or a cone is a crash; after three crashes the car goes to the
- * pit stop and the child does ten squats for two minutes while it is repaired.
- * 10 right words = 3 stars, 7 = 2, 5 = 1.
+ * pit stop: ten squats, ten push-ups and a maze. After the car tracks comes the
+ * plane: three lanes and two heights, up/down to climb and dive.
+ * 10 right words = 3 stars, 7 = 2, 5 = 1; a race without mistakes brings a new car.
  */
 export class RaceScene extends Phaser.Scene {
   private rng!: Rng;
@@ -157,6 +169,17 @@ export class RaceScene extends Phaser.Scene {
   private gas = false;
   private brake = false;
   private streaks: { a: number; r: number; v: number }[] = [];
+  /** Plane: which height step it flies at, where it is now, and the camera height. */
+  private plane = false;
+  private alt = 0;
+  private planeY = 0;
+  private camY = CAM_H;
+  /** Cones / storm clouds hit and words asked in this race. */
+  private bumps = 0;
+  private asked: string[] = [];
+  private nitroLeft = 0;
+  private nitroBtn?: Phaser.GameObjects.Container;
+  private nitroText?: Phaser.GameObjects.Text;
 
   // objects
   private road?: Phaser.GameObjects.Graphics;
@@ -182,9 +205,14 @@ export class RaceScene extends Phaser.Scene {
     const svgs: Record<string, string> = {
       'race-tree': TREE, 'race-traffic': TRAFFIC_LIGHT, 'race-billboard': BILLBOARD, 'race-cone': CONE, 'race-arch': ARCH,
       'race-cloud': CLOUD, 'race-moon': MOON, 'race-sun': SUN, 'race-wrench': WRENCH, 'race-star': STAR, 'race-star-off': STAR_OFF,
-      'race-lamp-off': lampSvg(false), 'race-lamp-on': lampSvg(true),
+      'race-lamp-off': lampSvg(false), 'race-lamp-on': lampSvg(true), 'race-storm': STORM, 'race-island': ISLAND, 'race-ship': SHIP,
+      'race-coin': COIN, 'race-nitro': NITRO, 'race-part': PART, 'race-garage': GARAGE,
     };
-    for (const c of CARS) svgs[`race-car-${c.id}`] = carSvg(c);
+    for (const c of CARS) {
+      svgs[`race-car-${c.id}`] = carSvg(c);
+      svgs[`race-plane-${c.id}`] = planeSvg(c);
+    }
+    for (const c of COLORS) svgs[`race-${c.id}`] = colorBlobSvg(c.paint);
     for (const [time, pal] of Object.entries(PALETTES)) {
       svgs[`race-skyline-${time}`] = skylineSvg(pal);
       for (let i = 0; i < 8; i++) svgs[`race-house-${time}-${i}`] = houseSvg(i, pal);
@@ -210,6 +238,9 @@ export class RaceScene extends Phaser.Scene {
         if (!this.driving) return;
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.steer(-1);
         if (e.code === 'ArrowRight' || e.code === 'KeyD') this.steer(1);
+        if (this.plane && (e.code === 'ArrowUp' || e.code === 'KeyW')) this.climb(1);
+        if (this.plane && (e.code === 'ArrowDown' || e.code === 'KeyS')) this.climb(-1);
+        if (e.code === 'KeyN' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.useNitro();
         if (e.code === 'Space' || e.code === 'Enter') this.repeatCue();
         if (e.code.startsWith('Arrow')) e.preventDefault();
       });
@@ -326,12 +357,15 @@ export class RaceScene extends Phaser.Scene {
 
   // ---------- menu: car and track ----------
 
+  private save() {
+    writeStore(STORE_KEY, this.progress);
+  }
+
   private showMenu() {
     this.clear();
     const bg = this.keep(this.add.graphics());
     bg.fillGradientStyle(0x14213d, 0x14213d, 0x3a0ca3, 0x3a0ca3, 1).fillRect(0, 0, W, H);
-    // a chequered strip and spotlights: the garage
-    for (let i = 0; i < 40; i++) bg.fillStyle(i % 2 ? 0xffffff : 0x222222, 0.9).fillRect(i * 32, 368, 32, 16).fillStyle(i % 2 ? 0x222222 : 0xffffff, 0.9).fillRect(i * 32, 384, 32, 16);
+    for (let i = 0; i < 40; i++) bg.fillStyle(i % 2 ? 0xffffff : 0x222222, 0.9).fillRect(i * 32, 452, 32, 14).fillStyle(i % 2 ? 0x222222 : 0xffffff, 0.9).fillRect(i * 32, 466, 32, 14);
     this.keep(
       this.add.text(W / 2, 46, 'Гонка слов', { fontFamily: FONT, fontSize: '58px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 10 }).setOrigin(0.5),
     );
@@ -339,68 +373,68 @@ export class RaceScene extends Phaser.Scene {
     this.raccoon = this.keep(this.add.image(80, 70, 'char-raccoon').setDisplaySize(130, 130));
     this.subtitle = this.keep(
       this.add
-        .text(W / 2, 680, '', { fontFamily: FONT, fontSize: '26px', color: '#ffffff', backgroundColor: '#14213dcc', padding: { x: 14, y: 8 }, align: 'center', wordWrap: { width: 1100 } })
+        .text(W / 2, 690, '', { fontFamily: FONT, fontSize: '26px', color: '#ffffff', backgroundColor: '#14213dcc', padding: { x: 14, y: 8 }, align: 'center', wordWrap: { width: 1100 } })
         .setOrigin(0.5)
         .setDepth(50)
         .setVisible(false),
     );
 
-    this.keep(this.add.text(W / 2, 108, 'Выбери машину', { fontFamily: FONT, fontSize: '30px', color: '#ffffff' }).setOrigin(0.5));
-    const rings: Phaser.GameObjects.Ellipse[] = [];
-    const cars: Phaser.GameObjects.Image[] = [];
-    let bounce: Phaser.Tweens.Tween | undefined;
-    const select = (id: CarId, say: boolean) => {
-      this.progress.car = id;
-      writeStore(STORE_KEY, this.progress);
-      CARS.forEach((c, i) => {
-        rings[i]!.setFillStyle(c.id === id ? 0xffd166 : 0xffffff, c.id === id ? 0.9 : 0.15);
-        cars[i]!.setScale(c.id === id ? 0.68 : 0.58).setY(330);
-      });
-      bounce?.remove();
-      const i = CARS.findIndex((c) => c.id === id);
-      bounce = this.tweens.add({ targets: cars[i], y: cars[i]!.y - 12, yoyo: true, repeat: -1, duration: 380, ease: 'Sine.easeInOut' });
-      if (say) {
-        this.beep([660, 880], 0.08);
-        void this.talk(english(carLine(id)));
-      }
-    };
-    CARS.forEach((c, i) => {
-      const x = 190 + i * 300;
-      rings.push(this.keep(this.add.ellipse(x, 330, 250, 56, 0xffffff, 0.15).setStrokeStyle(4, 0x14213d)));
-      const img = this.keep(this.add.image(x, 330, `race-car-${c.id}`).setOrigin(0.5, 0.95).setScale(0.58));
-      cars.push(img);
-      img.setInteractive({ useHandCursor: true }).on('pointerup', () => select(c.id, true));
-      this.keep(this.add.text(x, 356, c.name, { fontFamily: FONT, fontSize: '28px', color: '#ffffff', stroke: '#14213d', strokeThickness: 6 }).setOrigin(0.5, 0));
+    // the chosen car on a podium; tap to hear its name
+    const car = carById(this.progress.car);
+    this.keep(this.add.ellipse(330, 330, 380, 70, 0xffd166, 0.9).setStrokeStyle(5, 0x14213d));
+    const img = this.keep(this.add.image(330, 330, `race-car-${car.id}`).setOrigin(0.5, 0.92).setScale(0.75));
+    this.tweens.add({ targets: img, y: 320, yoyo: true, repeat: -1, duration: 420, ease: 'Sine.easeInOut' });
+    img.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+      this.beep([660, 880], 0.08);
+      void this.talk(english(carLine(car.id)));
     });
-    select(this.progress.car, false);
+    this.keep(this.add.text(330, 380, car.name, { fontFamily: FONT, fontSize: '32px', color: '#ffffff', stroke: '#14213d', strokeThickness: 6 }).setOrigin(0.5));
+    const g = this.keep(button(this, 760, 210, '         Гараж', () => this.openGarage(), { w: 340, h: 100, color: 0xe63946 }));
+    g.add(this.add.image(-108, 0, 'race-garage').setDisplaySize(84, 72));
+    // coins, nitro, cars
+    this.keep(this.add.image(660, 320, 'race-coin').setDisplaySize(56, 56));
+    this.keep(this.add.text(700, 320, String(this.progress.coins), { fontFamily: FONT, fontSize: '40px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0, 0.5));
+    this.keep(this.add.image(830, 320, 'race-nitro').setDisplaySize(40, 56));
+    this.keep(this.add.text(860, 320, `${this.progress.nitro}`, { fontFamily: FONT, fontSize: '40px', color: '#7dd3fc', fontStyle: 'bold' }).setOrigin(0, 0.5));
+    this.keep(
+      this.add
+        .text(1000, 320, `Машин: ${this.progress.cars.length} из ${CARS.length}\nБез ошибок: ${this.progress.flawless}`, { fontFamily: FONT, fontSize: '26px', color: '#ffffff', lineSpacing: 6 })
+        .setOrigin(0, 0.5),
+    );
+    this.keep(this.add.text(760, 400, 'Гонка без ошибок — новая машина!', { fontFamily: FONT, fontSize: '24px', color: '#adb5bd' }).setOrigin(0.5));
 
-    this.keep(this.add.text(W / 2, 436, 'Выбери трассу', { fontFamily: FONT, fontSize: '30px', color: '#ffffff' }).setOrigin(0.5));
     TRACKS.forEach((t, i) => {
-      const x = 240 + i * 400;
-      const y = 560;
+      const x = 140 + i * 250;
+      const y = 585;
       const open = unlocked(this.progress, i);
       const pal = PALETTES[t.time];
       const card = this.keep(this.add.container(x, y));
-      const g = this.add.graphics();
-      g.fillStyle(0x000000, 0.3).fillRoundedRect(-170, -92, 348, 196, 18);
-      g.fillGradientStyle(pal.skyTop, pal.skyTop, pal.skyBottom, pal.skyBottom, 1).fillRect(-170, -100, 340, 110);
-      g.fillStyle(pal.grass[0]).fillRect(-170, 10, 340, 86);
-      g.fillStyle(pal.road[0]).fillTriangle(-110, 96, 110, 96, 0, 10);
-      g.fillStyle(0xffffff).fillRect(-3, 30, 6, 14).fillRect(-4, 60, 8, 22);
-      g.lineStyle(6, open ? 0xffd166 : 0x6c757d).strokeRoundedRect(-170, -100, 340, 196, 18);
-      card.add(g);
-      card.add(this.add.text(0, -76, t.name, { fontFamily: FONT, fontSize: '28px', color: '#ffffff', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 6 }).setOrigin(0.5));
+      const gr = this.add.graphics();
+      gr.fillStyle(0x000000, 0.3).fillRoundedRect(-112, -76, 232, 170, 16);
+      gr.fillGradientStyle(pal.skyTop, pal.skyTop, pal.skyBottom, pal.skyBottom, 1).fillRect(-115, -85, 230, 95);
+      if (t.vehicle === 'car') {
+        gr.fillStyle(pal.grass[0]).fillRect(-115, 10, 230, 75);
+        gr.fillStyle(pal.road[0]).fillTriangle(-80, 85, 80, 85, 0, 10);
+        gr.fillStyle(0xffffff).fillRect(-3, 28, 6, 12).fillRect(-4, 54, 8, 20);
+      } else {
+        gr.fillStyle(t.time === 'day' ? 0x219ebc : 0xffc8dd).fillRect(-115, 10, 230, 75);
+        gr.fillStyle(0xffffff, 0.5).fillRect(-115, 30, 230, 4).fillRect(-115, 56, 230, 4);
+      }
+      gr.lineStyle(6, open ? 0xffd166 : 0x6c757d).strokeRoundedRect(-115, -85, 230, 170, 16);
+      card.add(gr);
+      if (t.vehicle === 'plane') card.add(this.add.image(0, 34, `race-plane-${car.id}`).setDisplaySize(105, 65));
+      card.add(this.add.text(0, -62, t.name, { fontFamily: FONT, fontSize: '22px', color: '#ffffff', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 6 }).setOrigin(0.5));
+      card.add(this.add.text(0, -30, t.vehicle === 'car' ? `машина · ${t.lanes} полосы` : 'самолёт', { fontFamily: FONT, fontSize: '17px', color: '#14213d', backgroundColor: '#ffd166', padding: { x: 6, y: 2 } }).setOrigin(0.5));
       const stars = this.progress.stars[i] ?? 0;
-      for (let k = 0; k < 3; k++) card.add(this.add.image(-60 + k * 60, 52, k < stars ? 'race-star' : 'race-star-off').setDisplaySize(52, 52));
-      card.add(this.add.text(0, -36, `${t.lanes} полосы`, { fontFamily: FONT, fontSize: '22px', color: '#14213d', backgroundColor: '#ffd166', padding: { x: 6, y: 2 } }).setOrigin(0.5));
+      for (let k = 0; k < 3; k++) card.add(this.add.image(-48 + k * 48, t.vehicle === 'car' ? 58 : 70, k < stars ? 'race-star' : 'race-star-off').setDisplaySize(40, 40));
       if (!open) {
-        card.add(this.add.rectangle(0, -2, 340, 196, 0x000000, 0.5));
+        card.add(this.add.rectangle(0, 0, 230, 170, 0x000000, 0.5));
         const lock = this.add.graphics();
-        lock.lineStyle(10, 0xffd166).beginPath().arc(0, -14, 22, Math.PI, 0).strokePath();
-        lock.fillStyle(0xffd166).fillRoundedRect(-32, -14, 64, 50, 8);
+        lock.lineStyle(9, 0xffd166).beginPath().arc(0, 0, 18, Math.PI, 0).strokePath();
+        lock.fillStyle(0xffd166).fillRoundedRect(-26, 0, 52, 40, 7);
         card.add(lock);
       }
-      card.setSize(340, 196).setInteractive({ useHandCursor: true });
+      card.setSize(230, 170).setInteractive({ useHandCursor: true });
       card.on('pointerdown', () => card.setScale(0.96));
       card.on('pointerout', () => card.setScale(1));
       card.on('pointerup', () => {
@@ -422,6 +456,38 @@ export class RaceScene extends Phaser.Scene {
     }
   }
 
+  private openGarage() {
+    this.clear();
+    this.run++;
+    const run = this.run;
+    void runGarage(this.garageHost(), run).then(() => {
+      if (run === this.run && this.sys.isActive()) this.showMenu();
+    });
+  }
+
+  /** What the garage and the pit stop need from the scene. */
+  private garageHost() {
+    return {
+      scene: this as Phaser.Scene,
+      rng: this.rng,
+      progress: () => this.progress,
+      setProgress: (p: Progress) => {
+        this.progress = p;
+        this.save();
+      },
+      keep: <T extends Phaser.GameObjects.GameObject>(o: T) => this.keep(o),
+      talk: (...u: Utterance[]) => this.talk(...u),
+      ru: (id: string) => this.ru(id),
+      beep: (f: number[], d?: number) => this.beep(f, d),
+      wait: (ms: number, run: number) => this.wait(ms, run),
+      alive: (run: number) => run === this.run && this.sys.isActive(),
+      setRaccoon: (img?: Phaser.GameObjects.Image, sub?: Phaser.GameObjects.Text) => {
+        this.raccoon = img;
+        this.subtitle = sub;
+      },
+    };
+  }
+
   // ---------- the race ----------
 
   private laneX(i: number) {
@@ -437,9 +503,13 @@ export class RaceScene extends Phaser.Scene {
     return this.curve * z * z;
   }
 
-  private project(z: number, x: number) {
+  private project(z: number, x: number, y = 0) {
     const k = FOCAL / z;
-    return { x: W / 2 + (x + this.bend(z) - this.camX) * k, y: HOR + CAM_H * k, k };
+    return { x: W / 2 + (x + this.bend(z) - this.camX) * k, y: HOR + (this.camY - y) * k, k };
+  }
+
+  private altY(h: number) {
+    return h * ALT_STEP;
   }
 
   private startRace(idx: number) {
@@ -448,8 +518,9 @@ export class RaceScene extends Phaser.Scene {
     this.trackIdx = idx;
     this.track = TRACKS[idx]!;
     this.pal = PALETTES[this.track.time];
-    this.rows = planRace(this.track, this.rng, this.progress.misses);
-    this.tele = startRun('race', { track: idx, car: this.progress.car, lanes: this.track.lanes, rows: this.rows.length });
+    this.rows = planRace(this.track, this.rng, this.progress.misses, this.progress.seen);
+    this.plane = this.track.vehicle === 'plane';
+    this.tele = startRun('race', { track: idx, car: this.progress.car, lanes: this.track.lanes, rows: this.rows.length, vehicle: this.track.vehicle });
     this.pos = 0;
     this.speed = 0;
     this.lane = Math.floor((this.track.lanes - 1) / 2);
@@ -469,6 +540,12 @@ export class RaceScene extends Phaser.Scene {
     this.missed = [];
     this.spin = 0;
     this.gas = this.brake = false;
+    this.alt = 0;
+    this.planeY = 0;
+    this.camY = this.plane ? PLANE_CAM : CAM_H;
+    this.bumps = 0;
+    this.asked = [];
+    this.nitroLeft = 0;
 
     // sky, sun or moon, clouds, the far city
     const sky = this.keep(this.add.graphics().setDepth(-30));
@@ -483,19 +560,21 @@ export class RaceScene extends Phaser.Scene {
         this.tweens.add({ targets: cl, x: cl.x - 300, duration: 40000 + this.rng() * 30000, repeat: -1, onRepeat: () => (cl.x = W + 150) });
       }
     }
-    this.skyline = this.keep(this.add.tileSprite(0, HOR + 4, W, 160, `race-skyline-${this.track.time}`).setOrigin(0, 1).setDepth(-27));
+    if (!this.plane) this.skyline = this.keep(this.add.tileSprite(0, HOR + 4, W, 160, `race-skyline-${this.track.time}`).setOrigin(0, 1).setDepth(-27));
 
     this.road = this.keep(this.add.graphics().setDepth(-20));
     this.fx = this.keep(this.add.graphics().setDepth(1900));
 
     // the car
-    this.car = this.keep(this.add.image(W / 2, CAR_Y, `race-car-${this.progress.car}`).setOrigin(0.5, 1).setDisplaySize(CAR_PX, (CAR_PX * CAR_H) / CAR_W).setDepth(2000));
+    this.car = this.plane
+      ? this.keep(this.add.image(W / 2, CAR_Y, `race-plane-${this.progress.car}`).setOrigin(0.5, 0.9).setDisplaySize(PLANE_PX, (PLANE_PX * PLANE_H) / PLANE_W).setDepth(2000))
+      : this.keep(this.add.image(W / 2, CAR_Y, `race-car-${this.progress.car}`).setOrigin(0.5, 1).setDisplaySize(CAR_PX, (CAR_PX * CAR_H) / CAR_W).setDepth(2000));
     this.brakeGlow = this.keep(this.add.ellipse(W / 2, CAR_Y - 90, 320, 60, 0xff3030, 0).setDepth(2001));
 
     this.drawHud();
     this.bindTouch();
     for (let i = 0; i < 40; i++) this.spawnScenery();
-    this.addThing({ s: 3, x: 0, w: this.roadHalf * 2 + 0.6, kind: 'arch', key: 'race-arch' });
+    if (!this.plane) this.addThing({ s: 3, x: 0, w: this.roadHalf * 2 + 0.6, kind: 'arch', key: 'race-arch' });
     void this.raceLoop(this.run);
   }
 
@@ -532,6 +611,16 @@ export class RaceScene extends Phaser.Scene {
     this.needle = this.keep(this.add.graphics({ x: 1180, y: 190 }).setDepth(3001));
     this.kmh = this.keep(this.add.text(1180, 232, '0', { fontFamily: FONT, fontSize: '28px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5).setDepth(3002));
     this.keep(this.add.text(1180, 258, 'км/ч', { fontFamily: FONT, fontSize: '16px', color: '#ffffff' }).setOrigin(0.5).setDepth(3002));
+    // nitro bottles bought in the garage
+    this.nitroBtn = undefined;
+    if (this.progress.nitro > 0) {
+      const ring = this.add.circle(0, 0, 52, 0xf77f00, 0.9).setStrokeStyle(5, 0xffffff);
+      const icon = this.add.image(-8, 0, 'race-nitro').setDisplaySize(44, 62);
+      this.nitroText = this.add.text(30, 24, String(this.progress.nitro), { fontFamily: FONT, fontSize: '28px', color: '#ffffff', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 5 }).setOrigin(0.5);
+      this.nitroBtn = this.keep(this.add.container(1180, 350, [ring, icon, this.nitroText]).setSize(110, 110).setDepth(3001).setInteractive({ useHandCursor: true }));
+      this.nitroBtn.on('pointerdown', () => this.useNitro());
+      this.keep(this.add.text(1180, 412, 'нитро', { fontFamily: FONT, fontSize: '18px', color: '#ffffff' }).setOrigin(0.5).setDepth(3001));
+    }
   }
 
   private lineX(n: number) {
@@ -554,55 +643,104 @@ export class RaceScene extends Phaser.Scene {
   }
 
   private stepLine(n: number) {
-    this.linePos = Math.min(LINE_MAX, n);
+    this.linePos = Math.max(0, Math.min(LINE_MAX, n));
     this.lineText?.setText(String(this.linePos));
     if (this.lineCar) this.tweens.add({ targets: this.lineCar, x: this.lineX(this.linePos), duration: 260, ease: 'Quad.easeOut' });
   }
 
-  /** Booster: pick the bigger one, guess where it lands, then count the steps aloud in English. */
+  /**
+   * Booster after rows 4, 8 and 11. The task grows with the track: pick the
+   * bigger booster; two boosters at once (a sum); which pair gives more; or an
+   * oil puddle (headwind for the plane) that rolls the car back. Then guess
+   * where we land and count the steps aloud in English.
+   */
   private async booster(after: number, run: number): Promise<boolean> {
     const ok = () => run === this.run && this.sys.isActive();
-    const [a, b] = boosterPair(after);
+    const task: BoostTask = boosterTask(this.track.boost, after, this.linePos, this.rng);
     const layer: Phaser.GameObjects.GameObject[] = [];
     const d = <T extends Phaser.GameObjects.GameObject>(o: T) => {
       (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(3200);
-      layer.push(o);
+      layer.push(this.keep(o));
       return o;
     };
-    d(this.add.rectangle(W / 2, 420, 760, 300, 0x14213d, 0.9).setStrokeStyle(5, 0xffd166));
-    const title = d(this.add.text(W / 2, 315, 'Бустер! Какой больше?', { fontFamily: FONT, fontSize: '36px', color: '#ffd166' }).setOrigin(0.5));
-    const choose = <T,>(opts: { label: string; v: T; color: number }[], y: number) =>
+    d(this.add.rectangle(W / 2, 420, 820, 320, 0x14213d, 0.92).setStrokeStyle(5, 0xffd166));
+    const title = d(this.add.text(W / 2, 305, '', { fontFamily: FONT, fontSize: '34px', color: '#ffd166', align: 'center', wordWrap: { width: 780 } }).setOrigin(0.5));
+    const choose = <T,>(opts: { label: string; v: T; color: number; w?: number }[], y: number) =>
       new Promise<T>((resolve) => {
-        const btns = opts.map((o, i) => d(button(this, W / 2 + (i - (opts.length - 1) / 2) * 230, y, o.label, () => {
+        const gap = Math.max(230, (opts[0]?.w ?? 200) + 40);
+        const btns = opts.map((o, i) => d(button(this, W / 2 + (i - (opts.length - 1) / 2) * gap, y, o.label, () => {
           btns.forEach((x) => x.destroy());
           resolve(o.v);
-        }, { w: 200, h: 110, color: o.color })));
+        }, { w: o.w ?? 200, h: 110, color: o.color })));
       });
+    const from = this.linePos;
+    let v: number;
     const t0 = Date.now();
-    void this.talk(this.ru('raccoon.race.boost'));
-    const opts = this.rng() < 0.5 ? [a, b] : [b, a];
-    const v = await choose(opts.map((x) => ({ label: `+${x}`, v: x, color: 0xe76f51 })), 420);
-    if (!ok()) return false;
-    this.tele?.answer({ item: `boost-${a}-${b}`, correct: v === Math.max(a, b), chosen: String(v), ms: Date.now() - t0, skill: 'compare' });
-    if (v !== Math.max(a, b) && !(await this.talk(this.ru('raccoon.race.boost.small')))) return false;
+    if (task.kind === 'compare') {
+      title.setText('Бустер! Какой больше?');
+      void this.talk(this.ru('raccoon.race.boost'));
+      const opts = this.rng() < 0.5 ? [task.a, task.b] : [task.b, task.a];
+      v = await choose(opts.map((x) => ({ label: `+${x}`, v: x, color: 0xe76f51 })), 430);
+      if (!ok()) return false;
+      const best = Math.max(task.a, task.b);
+      this.tele?.answer({ item: `boost-${task.a}-${task.b}`, correct: v === best, chosen: String(v), ms: Date.now() - t0, skill: 'compare' });
+      if (v !== best && !(await this.talk(this.ru('raccoon.race.boost.small')))) return false;
+    } else if (task.kind === 'pairs') {
+      title.setText('Какая пара бустеров даёт больше?');
+      void this.talk(this.ru('raccoon.race.boost.pairs'));
+      const sa = task.a[0] + task.a[1];
+      const sb = task.b[0] + task.b[1];
+      const opts = this.rng() < 0.5 ? [task.a, task.b] : [task.b, task.a];
+      v = await choose(opts.map((x) => ({ label: `+${x[0]}  и  +${x[1]}`, v: x[0] + x[1], color: 0xe76f51, w: 300 })), 430);
+      if (!ok()) return false;
+      this.tele?.answer({ item: `pairs-${task.a.join('+')}-${task.b.join('+')}`, correct: v === Math.max(sa, sb), chosen: String(v), ms: Date.now() - t0, skill: 'add_compare' });
+      if (v !== Math.max(sa, sb) && !(await this.talk(this.ru('raccoon.race.boost.small')))) return false;
+    } else if (task.kind === 'sum') {
+      v = task.a + task.b;
+    } else {
+      v = -task.a;
+    }
+    // where do we land?
     const t1 = Date.now();
-    title.setText(`Мы на ${this.linePos}, едем +${v}. Куда приедем?`);
-    void this.talk(this.ru('raccoon.race.where'));
-    const landing = landingOptions(this.linePos, v, this.rng);
-    const guess = await choose(landing.map((x) => ({ label: String(x), v: x, color: 0x277da1 })), 420);
+    if (task.kind === 'sum') {
+      title.setText(`Два бустера: +${task.a} и +${task.b}. Мы на ${from}. Куда приедем?`);
+      void this.talk(this.ru('raccoon.race.boost.sum'));
+    } else if (task.kind === 'minus') {
+      title.setText(`${this.plane ? 'Встречный ветер' : 'Лужа масла'}! Назад на ${task.a}. Мы на ${from}. Куда попадём?`);
+      void this.talk(this.ru(this.plane ? 'raccoon.race.wind' : 'raccoon.race.oil'));
+    } else {
+      title.setText(`Мы на ${from}, едем +${v}. Куда приедем?`);
+      void this.talk(this.ru('raccoon.race.where'));
+    }
+    const landing = landingOptions(from, v, this.rng);
+    const guess = await choose(landing.map((x) => ({ label: String(x), v: x, color: 0x277da1 })), 450);
     if (!ok()) return false;
-    const right = Math.min(LINE_MAX, this.linePos + v);
-    this.tele?.answer({ item: `land-${this.linePos}+${v}`, correct: guess === right, chosen: String(guess), ms: Date.now() - t1, skill: 'number_line' });
-    title.setText(`${this.linePos} + ${v} = ${right}`);
-    // Count on, one step per number, in English.
-    for (let n = this.linePos + 1; n <= right; n++) {
+    const right = Math.max(0, Math.min(LINE_MAX, from + boostSteps(task, v)));
+    this.tele?.answer({ item: `land-${from}${v < 0 ? '' : '+'}${v}`, correct: guess === right, chosen: String(guess), ms: Date.now() - t1, skill: task.kind === 'minus' ? 'subtract' : task.kind === 'compare' ? 'number_line' : 'add' });
+    title.setText(task.kind === 'sum' ? `${from} + ${task.a} + ${task.b} = ${right}` : v < 0 ? `${from} − ${-v} = ${right}` : `${from} + ${v} = ${right}`);
+    if (task.kind === 'minus') this.cameras.main.shake(300, 0.006);
+    // count on (or back), one step per number, in English
+    const dir = right >= from ? 1 : -1;
+    for (let n = from + dir; dir > 0 ? n <= right : n >= right; n += dir) {
       this.stepLine(n);
       this.beep([440 + n * 12], 0.08);
-      voice.say(english(`n${n}`));
+      if (n > 0) voice.say(english(`n${n}`));
       if (!(await this.wait(750, run))) return false;
     }
     layer.forEach((o) => o.destroy());
     return this.talk(guess === right ? this.ru('raccoon.race.where.yes') : this.ru('raccoon.race.where.no'));
+  }
+
+  private useNitro() {
+    if (!this.driving || this.nitroLeft > 0 || this.progress.nitro <= 0 || this.spin > 0) return;
+    this.progress = { ...this.progress, nitro: this.progress.nitro - 1 };
+    this.save();
+    this.nitroLeft = NITRO_S;
+    this.nitroText?.setText(String(this.progress.nitro));
+    if (this.progress.nitro <= 0) this.nitroBtn?.setAlpha(0.35);
+    this.beep([220, 330, 440, 660], 0.06, 'sawtooth', 0.05);
+    voice.say(english('race.nitro'));
+    this.tele?.event('nitro');
   }
 
   /** On-screen controls: lane arrows on the left, pedals on the right; swipes work too. */
@@ -629,10 +767,19 @@ export class RaceScene extends Phaser.Scene {
       c.on('pointerout', () => set(false));
       return c;
     };
-    pedal(1190, 'up', 0x38b000, (on) => (this.gas = on));
-    pedal(1040, 'down', 0xc1121f, (on) => (this.brake = on));
-    this.keep(this.add.text(1190, 700, 'газ', { fontFamily: FONT, fontSize: '20px', color: '#ffffff' }).setOrigin(0.5).setDepth(3000));
-    this.keep(this.add.text(1040, 700, 'тормоз', { fontFamily: FONT, fontSize: '20px', color: '#ffffff' }).setOrigin(0.5).setDepth(3000));
+    if (this.plane) {
+      // the plane flies at one speed: up and down change the height instead
+      const upDown = (dir: number) => (g: Phaser.GameObjects.Graphics) => g.fillStyle(0xffffff).fillTriangle(0, -dir * 28, -26, dir * 16, 26, dir * 16);
+      mk(1190, 540, 58, 0x277da1, upDown(1)).on('pointerdown', () => this.climb(1));
+      mk(1190, 670, 58, 0x277da1, upDown(-1)).on('pointerdown', () => this.climb(-1));
+      this.keep(this.add.text(1090, 540, 'выше', { fontFamily: FONT, fontSize: '20px', color: '#ffffff', stroke: '#14213d', strokeThickness: 4 }).setOrigin(0.5).setDepth(3000));
+      this.keep(this.add.text(1090, 670, 'ниже', { fontFamily: FONT, fontSize: '20px', color: '#ffffff', stroke: '#14213d', strokeThickness: 4 }).setOrigin(0.5).setDepth(3000));
+    } else {
+      pedal(1190, 'up', 0x38b000, (on) => (this.gas = on));
+      pedal(1040, 'down', 0xc1121f, (on) => (this.brake = on));
+      this.keep(this.add.text(1190, 700, 'газ', { fontFamily: FONT, fontSize: '20px', color: '#ffffff' }).setOrigin(0.5).setDepth(3000));
+      this.keep(this.add.text(1040, 700, 'тормоз', { fontFamily: FONT, fontSize: '20px', color: '#ffffff' }).setOrigin(0.5).setDepth(3000));
+    }
     // swipe on the road
     const zone = this.keep(this.add.zone(W / 2, 450, 700, 400).setInteractive().setDepth(10));
     let start: { x: number; y: number } | undefined;
@@ -643,8 +790,17 @@ export class RaceScene extends Phaser.Scene {
       const dy = p.y - start.y;
       start = undefined;
       if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) this.steer(dx > 0 ? 1 : -1);
+      else if (Math.abs(dy) > 40 && this.plane) this.climb(dy < 0 ? 1 : -1);
       else if (Math.abs(dy) > 40) this.speed = Phaser.Math.Clamp(this.speed + (dy < 0 ? 3 : -3), this.track.minSpeed, this.track.maxSpeed);
     });
+  }
+
+  private climb(d: number) {
+    if (!this.driving || !this.plane || this.spin > 0) return;
+    const next = Phaser.Math.Clamp(this.alt + d, 0, this.track.heights - 1);
+    if (next === this.alt) return;
+    this.alt = next;
+    this.beep([d > 0 ? 520 : 360], 0.06, 'sine', 0.05);
   }
 
   private steer(d: number) {
@@ -655,11 +811,11 @@ export class RaceScene extends Phaser.Scene {
     this.beep([300], 0.05, 'sine', 0.05);
   }
 
-  private addThing(o: { s: number; x: number; w: number; kind: Thing['kind']; key?: string; obj?: Phaser.GameObjects.Container; baseW?: number; lane?: number; word?: string }) {
+  private addThing(o: { s: number; x: number; y?: number; w: number; kind: Thing['kind']; key?: string; obj?: Phaser.GameObjects.Container; baseW?: number; lane?: number; h?: number; word?: string }) {
     const obj = o.obj ?? this.add.image(0, 0, o.key!).setOrigin(0.5, 1);
     obj.setVisible(false);
     const baseW = o.baseW ?? (obj as Phaser.GameObjects.Image).width;
-    const t: Thing = { s: o.s, x: o.x, w: o.w, obj, baseW, kind: o.kind, lane: o.lane, word: o.word };
+    const t: Thing = { s: o.s, x: o.x, y: o.y, w: o.w, obj, baseW, kind: o.kind, lane: o.lane, h: o.h, word: o.word };
     this.things.push(t);
     return t;
   }
@@ -667,6 +823,29 @@ export class RaceScene extends Phaser.Scene {
   /** Houses along both sides, with lamps, trees and the odd billboard at the kerb. */
   private spawnScenery() {
     const far = this.pos + ZFAR;
+    if (this.plane) {
+      const day = this.track.time === 'day';
+      // far below: islands and ships on the sea, or a floor of clouds
+      while (this.nextHouse < far) {
+        for (const side of [-1, 1]) {
+          const x = side * (3 + this.rng() * 9);
+          if (day) {
+            const ship = this.rng() < 0.35;
+            this.addThing({ s: this.nextHouse + this.rng() * 3, x, y: SEA_Y, w: ship ? 2.2 : 4, kind: 'scenery', key: ship ? 'race-ship' : 'race-island' });
+          } else {
+            this.addThing({ s: this.nextHouse + this.rng() * 3, x, y: SEA_Y, w: 6 + this.rng() * 4, kind: 'scenery', key: 'race-cloud' });
+          }
+        }
+        this.nextHouse += day ? 6 : 4;
+      }
+      // white clouds in the air beside the lanes
+      while (this.nextProp < far) {
+        const side = this.rng() < 0.5 ? -1 : 1;
+        this.addThing({ s: this.nextProp, x: side * (this.roadHalf + 1.2 + this.rng() * 3), y: -1.5 + this.rng() * 4, w: 1.6 + this.rng() * 1.6, kind: 'scenery', key: 'race-cloud' });
+        this.nextProp += 2.2;
+      }
+      return;
+    }
     while (this.nextHouse < far) {
       for (const side of [-1, 1]) {
         const i = Math.floor(this.rng() * 8);
@@ -689,18 +868,26 @@ export class RaceScene extends Phaser.Scene {
   }
 
   /** A word board standing in one lane: a picture (or a number) and the English word. */
-  private makeBoard(word: string, lane: number): Phaser.GameObjects.Container {
+  private makeBoard(word: string, lane: number, air = false): Phaser.GameObjects.Container {
     const c = this.add.container(0, 0);
     const g = this.add.graphics();
     const col = LANE_COLORS[lane % LANE_COLORS.length]!;
-    g.fillStyle(0x495057).fillRect(-70, -60, 16, 60).fillRect(54, -60, 16, 60);
-    g.fillStyle(0x000000, 0.25).fillEllipse(0, 0, 220, 26);
+    if (air) {
+      // a card in the sky hangs from a balloon
+      g.lineStyle(4, 0xffffff).lineBetween(0, -330, 0, -372);
+      g.fillStyle(col).fillEllipse(0, -406, 64, 74).lineStyle(4, 0x2b2d42).strokeEllipse(0, -406, 64, 74);
+      g.fillStyle(0xffffff, 0.6).fillEllipse(-12, -420, 14, 22);
+    } else {
+      g.fillStyle(0x495057).fillRect(-70, -60, 16, 60).fillRect(54, -60, 16, 60);
+      g.fillStyle(0x000000, 0.25).fillEllipse(0, 0, 220, 26);
+    }
     g.fillStyle(col).fillRoundedRect(-120, -330, 240, 280, 26);
     g.fillStyle(0xfffaf0).fillRoundedRect(-106, -316, 212, 252, 18);
     g.lineStyle(6, 0x2b2d42).strokeRoundedRect(-120, -330, 240, 280, 26);
     c.add(g);
     const n = numberOf(word);
-    if (n === undefined) c.add(this.add.image(0, -214, `snake-${word}`).setDisplaySize(150, 150));
+    if (word.startsWith('c-')) c.add(this.add.image(0, -214, `race-${word}`).setDisplaySize(150, 150));
+    else if (n === undefined) c.add(this.add.image(0, -214, `snake-${word}`).setDisplaySize(150, 150));
     else c.add(this.add.text(0, -214, String(n), { fontFamily: FONT, fontSize: '120px', color: '#2b2d42', fontStyle: 'bold' }).setOrigin(0.5));
     const text = ENGLISH[word] ?? word;
     c.add(
@@ -735,18 +922,34 @@ export class RaceScene extends Phaser.Scene {
       const row = this.rows[i]!;
       this.dots[i]?.setStrokeStyle(5, 0xffd166);
       // cones in the gap before the row
-      for (const l of row.cones) this.addThing({ s: this.pos + 16 + this.rng() * 4, x: this.laneX(l), w: 0.42, kind: 'cone', key: 'race-cone', lane: l });
+      for (const c of row.cones) {
+        const s = this.pos + 16 + this.rng() * 4;
+        if (this.plane) this.addThing({ s, x: this.laneX(c.lane), y: this.altY(c.h) + 0.05, w: 0.75, kind: 'cone', key: 'race-storm', lane: c.lane, h: c.h });
+        else this.addThing({ s, x: this.laneX(c.lane), w: 0.42, kind: 'cone', key: 'race-cone', lane: c.lane, h: 0 });
+      }
       this.cue = english(row.target);
+      if (!this.asked.includes(row.target)) this.asked.push(row.target);
       this.cueRepeated = false;
       if (!(await this.wait(400, run))) return;
       if (!(await this.talk(this.cue))) return;
       this.tele?.ask(row.target, { row: i });
-      const res = await new Promise<RowResult>((done) => {
-        const s = this.pos + Z_SPAWN;
-        row.lanes.forEach((w, l) => this.addThing({ s, x: this.laneX(l), w: 0.82, kind: 'board', obj: this.makeBoard(w, l), baseW: 240, lane: l, word: w }));
-        this.pendingRow = { s, row, done };
-      });
-      if (!ok()) return;
+      let res: RowResult;
+      for (;;) {
+        res = await new Promise<RowResult>((done) => {
+          const s = this.pos + Z_SPAWN;
+          for (const c of row.cards) {
+            if (this.plane) this.addThing({ s, x: this.laneX(c.lane), y: this.altY(c.h), w: AIR_W, kind: 'board', obj: this.makeBoard(c.word, c.lane, true), baseW: 240, lane: c.lane, h: c.h, word: c.word });
+            else this.addThing({ s, x: this.laneX(c.lane), w: 0.82, kind: 'board', obj: this.makeBoard(c.word, c.lane), baseW: 240, lane: c.lane, h: 0, word: c.word });
+          }
+          this.pendingRow = { s, row, done };
+        });
+        if (!ok()) return;
+        // the plane flew past every card: the same word comes again, cards in new places
+        if (res.ok || res.word) break;
+        this.tele?.event('pass', { row: i });
+        if (!(await this.talk(this.ru('raccoon.race.pass'), this.cue))) return;
+        row.cards = reshuffle(row.cards, this.track, this.rng);
+      }
       this.results[i] = res.ok;
       this.tele?.answer({ item: row.target, correct: res.ok, chosen: res.ok ? undefined : res.word, row: i, speed: Math.round(this.speed * 10) / 10 });
       this.dots[i]?.setFillStyle(res.ok ? 0x38b000 : 0xe63946, 1).setStrokeStyle(3, 0xffffff);
@@ -763,7 +966,7 @@ export class RaceScene extends Phaser.Scene {
       }
       if (this.coneHit && !this.coneTold) {
         this.coneTold = true;
-        if (!(await this.talk(this.ru('raccoon.race.cone')))) return;
+        if (!(await this.talk(this.ru(this.plane ? 'raccoon.race.storm' : 'raccoon.race.cone')))) return;
       }
       if (this.sincePit >= CRASHES_TO_PIT) {
         if (!(await this.pitStop(run))) return;
@@ -774,7 +977,7 @@ export class RaceScene extends Phaser.Scene {
       if (BOOST_AFTER.includes(i) && i < this.rows.length - 1 && !(await this.booster(i, run))) return;
     }
     // finish line
-    this.addThing({ s: this.pos + 30, x: 0, w: this.roadHalf * 2 + 0.6, kind: 'arch', key: 'race-arch' });
+    this.addThing({ s: this.pos + 30, x: 0, y: this.plane ? -0.4 : 0, w: this.roadHalf * 2 + 0.6, kind: 'arch', key: 'race-arch' });
     while (ok() && this.things.some((t) => t.kind === 'arch' && t.s - this.pos > Z_HIT)) await this.wait(100, run);
     if (!ok()) return;
     voice.say(english('race.finish'));
@@ -870,7 +1073,7 @@ export class RaceScene extends Phaser.Scene {
   private collectFx(t: Thing) {
     this.beep([784, 1046, 1318], 0.09);
     t.fly = { vx: 0, vy: -1300, spin: 0, t: 0 };
-    const p = this.project(Math.max(t.s - this.pos, ZNEAR), t.x);
+    const p = this.project(Math.max(t.s - this.pos, ZNEAR), t.x, t.y ?? 0);
     const st = this.keep(this.add.image(p.x, p.y - 150, 'race-star').setDisplaySize(80, 80).setDepth(3040));
     this.tweens.add({ targets: st, x: 176 + (this.results.filter((r) => r !== undefined).length) * 44, y: 42, scale: 0.2, angle: 360, duration: 650, ease: 'Cubic.easeIn', onComplete: () => st.destroy() });
   }
@@ -883,14 +1086,14 @@ export class RaceScene extends Phaser.Scene {
       const up = this.gas || k?.UP?.isDown || k?.W?.isDown;
       const down = this.brake || k?.DOWN?.isDown || k?.S?.isDown;
       if (this.spin <= 0) {
-        if (up) this.speed += 7 * dt;
-        else if (down) this.speed -= 10 * dt;
+        if (up && !this.plane) this.speed += 7 * dt;
+        else if (down && !this.plane) this.speed -= 10 * dt;
         this.speed = Phaser.Math.Clamp(this.speed, this.track.minSpeed, this.track.maxSpeed);
       } else {
         this.spin -= dt;
         this.speed = Math.min(this.speed + 3 * dt, this.track.minSpeed);
       }
-      this.brakeGlow?.setFillStyle(0xff3030, down ? 0.35 : 0);
+      this.brakeGlow?.setFillStyle(0xff3030, down && !this.plane ? 0.35 : 0);
     } else {
       this.coast = Math.max(0, this.coast - 22 * dt);
       if (this.spin > 0) this.spin -= dt;
@@ -898,7 +1101,10 @@ export class RaceScene extends Phaser.Scene {
     // ease off by a quarter when the word boards come close, so there is time to choose
     const near = this.pendingRow && this.pendingRow.s - this.pos < SLOW_Z;
     this.slow += ((near ? SLOW : 1) - this.slow) * Math.min(1, dt * 4);
-    this.shown = this.driving ? this.speed * this.slow : this.coast;
+    // nitro: half as fast again for a few seconds, but never into the word cards
+    if (this.nitroLeft > 0) this.nitroLeft = near || !this.driving ? 0 : Math.max(0, this.nitroLeft - dt);
+    const boost = this.nitroLeft > 0 ? 1.6 : 1;
+    this.shown = this.driving ? this.speed * this.slow * boost : this.coast;
     this.pos += this.shown * dt;
     // the road bends gently from side to side
     this.curve = 0.006 * Math.sin(this.pos / 37) * Math.sin(this.pos / 91 + 1);
@@ -908,6 +1114,12 @@ export class RaceScene extends Phaser.Scene {
     const dx = target - this.carX;
     this.carX += Math.sign(dx) * Math.min(Math.abs(dx), 4.5 * dt);
     this.camX = lerp(this.camX, this.carX * 0.8, Math.min(1, dt * 5));
+    if (this.plane) {
+      const goal = this.altY(this.alt);
+      const dy = goal - this.planeY;
+      this.planeY += Math.sign(dy) * Math.min(Math.abs(dy), 3.2 * dt);
+      this.camY = lerp(this.camY, this.planeY + PLANE_CAM, Math.min(1, dt * 3));
+    }
 
     this.spawnScenery();
     this.drawRoad();
@@ -927,6 +1139,7 @@ export class RaceScene extends Phaser.Scene {
     const g = this.road!;
     const pal = this.pal;
     g.clear();
+    if (this.plane) return this.drawSea(g);
     g.fillStyle(mix(pal.grass[0], pal.fog, 0.6)).fillRect(0, HOR, W, H - HOR);
     const n0 = Math.floor((this.pos + ZNEAR) / SEG);
     const n1 = Math.floor((this.pos + ZFAR) / SEG);
@@ -982,6 +1195,37 @@ export class RaceScene extends Phaser.Scene {
     }
   }
 
+  /** Under the plane: the sea with wave stripes (or a floor of pink clouds) running towards us. */
+  private drawSea(g: Phaser.GameObjects.Graphics) {
+    const day = this.track.time === 'day';
+    const cols = day ? [0x1d8fb4, 0x2aa3c7] : [0xffd6e4, 0xffe8ef];
+    const fogc = day ? 0xbde0fe : this.pal.fog;
+    g.fillStyle(mix(cols[0]!, fogc, 0.7)).fillRect(0, HOR, W, H - HOR);
+    const n0 = Math.floor((this.pos + ZNEAR) / SEG);
+    const n1 = Math.floor((this.pos + ZFAR) / SEG);
+    for (let n = n1; n >= n0; n--) {
+      const zNear = Math.max(n * SEG - this.pos, ZNEAR);
+      const zFar = (n + 1) * SEG - this.pos;
+      if (zFar <= zNear) continue;
+      const a = this.project(zNear, 0, SEA_Y);
+      const b = this.project(zFar, 0, SEA_Y);
+      if (b.y > H) continue;
+      const fog = Math.min(1, Math.max(0, (zFar - 10) / (ZFAR - 10)));
+      g.fillStyle(mix(cols[n % 2]!, fogc, fog * 0.8)).fillRect(0, b.y, W, Math.min(H, a.y) - b.y + 1);
+    }
+    // faint lane guides in the air, so the child sees where the three ways go
+    const half = this.roadHalf;
+    for (let l = 0; l <= this.track.lanes; l++) {
+      const x = -half + l * LANE_W;
+      for (let z = 3; z < 30; z += 2.5) {
+        const zz = z - ((this.pos % 2.5) + 2.5) % 2.5;
+        if (zz < 2) continue;
+        const q = this.project(zz, x, -0.15);
+        g.fillStyle(0xffffff, 0.35 * (1 - zz / 30)).fillCircle(q.x, q.y, Math.max(1.5, q.k * 0.05));
+      }
+    }
+  }
+
   private placeThings(dt: number) {
     const keepIt: Thing[] = [];
     for (const t of this.things) {
@@ -1009,7 +1253,7 @@ export class RaceScene extends Phaser.Scene {
         if (!t.gone) t.obj.setVisible(false);
         continue;
       }
-      const p = this.project(z, t.x);
+      const p = this.project(z, t.x, t.y ?? 0);
       const scale = (t.w * p.k) / t.baseW;
       t.obj.setVisible(true).setPosition(p.x, p.y).setScale(scale).setDepth(1000 - z * 10);
       const fog = Math.min(1, Math.max(0, (ZFAR - z) / 10));
@@ -1025,15 +1269,22 @@ export class RaceScene extends Phaser.Scene {
     return best;
   }
 
+  /** The height step the plane is nearest to (always 0 for the car). */
+  private nearestAlt() {
+    return this.plane ? Math.round(this.planeY / ALT_STEP) : 0;
+  }
+
   private checkHits() {
     if (!this.driving) return;
     const lane = this.nearestLane();
+    const h = this.nearestAlt();
     for (const t of this.things) {
       if (t.kind !== 'cone' || t.checked || t.fly) continue;
       if (t.s - this.pos <= Z_HIT) {
         t.checked = true;
-        if (t.lane === lane) {
+        if (t.lane === lane && (t.h ?? 0) === h) {
           this.coneHit = true;
+          this.bumps++;
           t.fly = { vx: (this.rng() - 0.5) * 900, vy: -700, spin: 720, t: 0 };
           this.crashFx('cone');
           this.tele?.event('cone');
@@ -1043,11 +1294,14 @@ export class RaceScene extends Phaser.Scene {
     const pr = this.pendingRow;
     if (!pr || pr.s - this.pos > Z_HIT) return;
     this.pendingRow = undefined;
-    const word = pr.row.lanes[lane]!;
+    const word = pr.row.cards.find((c) => c.lane === lane && c.h === h)?.word;
     const boards = this.things.filter((t) => t.kind === 'board' && t.s === pr.s);
-    const hit = boards.find((t) => t.lane === lane);
+    const hit = boards.find((t) => t.lane === lane && (t.h ?? 0) === h);
     boards.forEach((t) => t !== hit && (t.fade = 1));
-    if (word === pr.row.target) {
+    if (word === undefined) {
+      // only in the air: an empty spot, nothing was hit
+      pr.done({ ok: false, word: '' });
+    } else if (word === pr.row.target) {
       if (hit) this.collectFx(hit);
       pr.done({ ok: true, word });
     } else {
@@ -1060,11 +1314,20 @@ export class RaceScene extends Phaser.Scene {
   private drawCar(time: number, dx: number) {
     const car = this.car;
     if (!car) return;
+    if (this.plane) {
+      // the plane bobs in the air and banks into a turn
+      const p = this.project(Z_HIT, this.carX, this.planeY + 0.45);
+      car.x = p.x;
+      car.y = p.y + Math.sin(time / 260) * 5;
+      car.angle = this.spin > 0 ? Math.sin(this.spin * 14) * 16 : Phaser.Math.Clamp(dx * 22, -18, 18);
+    } else {
+      const p = this.project(Z_HIT, this.carX);
+      const shake = this.shown > 0.1 ? Math.sin(time / 30) * (0.6 + this.shown / 20) : 0;
+      car.x = p.x;
+      car.y = CAR_Y + shake;
+      car.angle = this.spin > 0 ? Math.sin(this.spin * 14) * 12 : Phaser.Math.Clamp(dx * 14, -8, 8);
+    }
     const p = this.project(Z_HIT, this.carX);
-    const shake = this.shown > 0.1 ? Math.sin(time / 30) * (0.6 + this.shown / 20) : 0;
-    car.x = p.x;
-    car.y = CAR_Y + shake;
-    car.angle = this.spin > 0 ? Math.sin(this.spin * 14) * 12 : Phaser.Math.Clamp(dx * 14, -8, 8);
     this.brakeGlow?.setPosition(p.x, CAR_Y - 95);
     if (this.spin > 0) car.setTint(Math.floor(time / 80) % 2 ? 0xff9999 : 0xffffff);
     else car.clearTint();
@@ -1074,7 +1337,7 @@ export class RaceScene extends Phaser.Scene {
     const fx = this.fx!;
     fx.clear();
     const t = this.track;
-    const share = this.shown / t.maxSpeed;
+    const share = Math.min(1.4, this.shown / t.maxSpeed) * (this.plane ? 0.8 : 1);
     // speed streaks fly out from the far end of the road when going fast
     if (this.driving && share > 0.55 && this.streaks.length < 40 && this.rng() < share) this.streaks.push({ a: this.rng() * Math.PI * 2, r: 120, v: 900 + this.rng() * 600 });
     const cx = W / 2 + this.bend(ZFAR) * (FOCAL / ZFAR) - this.camX * (FOCAL / ZFAR);
@@ -1084,124 +1347,120 @@ export class RaceScene extends Phaser.Scene {
       const y1 = HOR + Math.sin(s.a) * s.r * 0.6;
       const x2 = cx + Math.cos(s.a) * (s.r + 60 * share);
       const y2 = HOR + Math.sin(s.a) * (s.r + 60 * share) * 0.6;
-      fx.lineStyle(3, 0xffffff, 0.35 * share).lineBetween(x1, y1, x2, y2);
+      fx.lineStyle(this.nitroLeft > 0 ? 5 : 3, this.nitroLeft > 0 ? 0x7dd3fc : 0xffffff, Math.min(0.6, 0.35 * share)).lineBetween(x1, y1, x2, y2);
       return s.r < 900;
     });
     // speedometer
     const n = this.needle;
     if (n) {
       n.clear();
-      const a = Math.PI * 0.75 + Math.min(1, this.shown / 22) * Math.PI * 1.5;
+      const a = Math.PI * 0.75 + Math.min(1, this.shown / 26) * Math.PI * 1.5;
       n.lineStyle(6, 0xff4d4d).lineBetween(0, 0, Math.cos(a) * 56, Math.sin(a) * 56);
       n.fillStyle(0xffffff).fillCircle(0, 0, 8);
     }
     this.kmh?.setText(String(Math.round(this.shown * 10)));
   }
 
-  // ---------- pit stop: ten squats while the car is repaired ----------
+  // ---------- pit stop: squats, push-ups and a maze while the car is repaired ----------
 
   private async pitStop(run: number): Promise<boolean> {
     this.driving = false;
     const was = this.speed;
     this.speed = 0;
     this.coast = 0;
-    const items: Phaser.GameObjects.GameObject[] = [];
-    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
-      items.push(this.keep(o));
-      (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(3200);
-      return o;
-    };
-    add(this.add.rectangle(W / 2, H / 2, W, H, 0x14213d, 0.88).setInteractive());
-    add(this.add.text(W / 2, 60, 'Пит-стоп!', { fontFamily: FONT, fontSize: '64px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5));
-    const car = add(this.add.image(330, 420, `race-car-${this.progress.car}`).setScale(0.75));
-    const rac = add(this.add.image(150, 470, 'char-raccoon').setDisplaySize(180, 180));
-    const wr = add(this.add.image(240, 420, 'race-wrench').setDisplaySize(90, 90));
-    this.tweens.add({ targets: wr, angle: { from: -30, to: 30 }, yoyo: true, repeat: -1, duration: 260 });
-    this.tweens.add({ targets: car, y: 412, yoyo: true, repeat: -1, duration: 200 });
-    this.tweens.add({ targets: rac, y: 460, yoyo: true, repeat: -1, duration: 300 });
-    // timer bar
-    const total = pitMs();
-    add(this.add.rectangle(W / 2, 140, 800, 34, 0xffffff, 0.2).setStrokeStyle(4, 0xffffff));
-    const bar = add(this.add.rectangle(W / 2 - 400, 140, 0, 34, 0x38b000).setOrigin(0, 0.5));
-    const clock = add(this.add.text(W / 2, 196, '2:00', { fontFamily: FONT, fontSize: '48px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5));
-    // squats
-    let squats = 0;
-    let last = 0;
-    let ready = false;
-    const circles = Array.from({ length: SQUATS }, (_, i) => add(this.add.circle(640 + (i % 5) * 104, 300 + Math.floor(i / 5) * 104, 40, 0xffffff, 0.15).setStrokeStyle(4, 0xffffff)));
-    const nums = circles.map((c, i) => add(this.add.text(c.x, c.y, String(i + 1), { fontFamily: FONT, fontSize: '40px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setAlpha(0.4)));
-    const squat = () => {
-      if (!ready || squats >= SQUATS || this.time.now - last < 1200) return;
-      last = this.time.now;
-      squats++;
-      circles[squats - 1]!.setFillStyle(0x38b000, 1);
-      nums[squats - 1]!.setAlpha(1);
-      this.tweens.add({ targets: [circles[squats - 1], nums[squats - 1]], scale: { from: 1.4, to: 1 }, duration: 300, ease: 'Back.easeOut' });
-      this.beep([440 + squats * 40], 0.1);
-      voice.say(english(`n${squats}`));
-      if (squats === SQUATS) void this.wait(900, run).then((alive) => alive && this.talk(this.ru('raccoon.race.pit.ten')));
-    };
-    const btn = add(button(this, 900, 560, 'Присел!', squat, { w: 420, h: 110, color: 0x38b000 }));
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.code === 'Enter') squat();
-    };
-    this.input.keyboard?.on('keydown', onKey);
-
-    if (!(await this.talk(this.ru('raccoon.race.pit.0'), this.ru('raccoon.race.pit.1')))) return false;
-    ready = true;
-    const start = this.time.now;
+    this.nitroLeft = 0;
+    const raccoon = this.raccoon;
+    const subtitle = this.subtitle;
+    const t0 = this.time.now;
     this.tele?.event('pit_stop.start', { crashes: this.crashes });
-    while (this.time.now - start < total) {
-      if (!(await this.wait(200, run))) return false;
-      const left = Math.max(0, total - (this.time.now - start));
-      const sec = Math.ceil(left / 1000);
-      clock.setText(`${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`);
-      bar.width = 800 * (1 - left / total);
-    }
-    this.input.keyboard?.off('keydown', onKey);
-    this.tele?.event('pit_stop.end', { squats, ms: this.time.now - start });
-    btn.destroy();
-    clock.setText('Готово!');
-    this.beep([523, 784, 1046], 0.12);
-    await this.talk(this.ru('raccoon.race.pit.done'));
-    if (run !== this.run) return false;
-    await new Promise<void>((r) => {
-      const go = add(button(this, 900, 560, 'Поехали!', () => r(), { w: 420, h: 110, color: 0xe63946 }));
-      this.tweens.add({ targets: go, scale: 1.08, yoyo: true, repeat: -1, duration: 400 });
+    const ok = await runPitStop(this.garageHost(), {
+      run,
+      plane: this.plane,
+      track: this.trackIdx,
+      carKey: `${this.plane ? 'race-plane' : 'race-car'}-${this.progress.car}`,
     });
-    items.forEach((o) => o.destroy());
+    this.raccoon = raccoon;
+    this.subtitle = subtitle;
+    if (!ok || run !== this.run) return false;
+    this.tele?.event('pit_stop.end', { ms: this.time.now - t0 });
     this.sincePit = 0;
     this.wrenches.forEach((w) => w.setAlpha(0.3).clearTint());
     this.speed = Math.max(this.track.minSpeed, was * 0.6);
     this.driving = true;
-    return run === this.run;
+    return true;
   }
 
   // ---------- results ----------
 
   private showResults() {
     const before = TRACKS.map((_, i) => unlocked(this.progress, i));
-    this.progress = recordRace(this.progress, this.trackIdx, this.correct, this.hits, this.missed);
-    writeStore(STORE_KEY, this.progress);
+    const outcome = { correct: this.correct, hits: this.hits, missed: this.missed, asked: this.asked, bumps: this.bumps, rows: this.rows.length };
+    const { progress, newCar, coins } = recordRace(this.progress, this.trackIdx, outcome);
+    this.progress = progress;
+    this.save();
     const opened = TRACKS.some((_, i) => !before[i] && unlocked(this.progress, i));
     const stars = starsFor(this.correct);
-    this.tele?.end({ completed: true, stars, score: this.correct, crashes: this.crashes, unlocked: opened });
-    const d = (o: Phaser.GameObjects.GameObject) => (this.keep(o) as unknown as Phaser.GameObjects.Components.Depth).setDepth(3300);
-    d(this.add.rectangle(W / 2, H / 2, W, H, 0x14213d, 0.8).setInteractive());
-    d(this.add.text(W / 2, 90, 'Финиш!', { fontFamily: FONT, fontSize: '80px', color: '#ffd166', fontStyle: 'bold', stroke: '#e63946', strokeThickness: 10 }).setOrigin(0.5));
+    const flawless = isFlawless(outcome);
+    this.tele?.end({ completed: true, stars, score: this.correct, crashes: this.crashes, bumps: this.bumps, unlocked: opened, coins, flawless, newCar: newCar?.id });
+    const d = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
+      (this.keep(o) as unknown as Phaser.GameObjects.Components.Depth).setDepth(3300);
+      return o;
+    };
+    d(this.add.rectangle(W / 2, H / 2, W, H, 0x14213d, 0.85).setInteractive());
+    d(this.add.text(W / 2, 70, 'Финиш!', { fontFamily: FONT, fontSize: '76px', color: '#ffd166', fontStyle: 'bold', stroke: '#e63946', strokeThickness: 10 }).setOrigin(0.5));
+    const sx = newCar ? 330 : W / 2;
     for (let k = 0; k < 3; k++) {
-      const st = this.add.image(W / 2 - 170 + k * 170, 260, k < stars ? 'race-star' : 'race-star-off').setDisplaySize(150, 150).setScale(0);
-      d(st);
-      this.tweens.add({ targets: st, scale: 150 / 120, delay: 300 + k * 350, duration: 400, ease: 'Back.easeOut', onStart: () => k < stars && this.beep([660 + k * 220], 0.12) });
+      const st = d(this.add.image(sx - 150 + k * 150, 200, k < stars ? 'race-star' : 'race-star-off').setDisplaySize(130, 130).setScale(0));
+      this.tweens.add({ targets: st, scale: 130 / 120, delay: 300 + k * 350, duration: 400, ease: 'Back.easeOut', onStart: () => k < stars && this.beep([660 + k * 220], 0.12) });
     }
-    d(this.add.text(W / 2, 390, `${this.childName}, правильных слов: ${this.correct} из ${this.rows.length}`, { fontFamily: FONT, fontSize: '40px', color: '#ffffff' }).setOrigin(0.5));
-    d(this.add.text(W / 2, 440, 'Три звезды — 10 слов, две — 7, одна — 5', { fontFamily: FONT, fontSize: '24px', color: '#adb5bd' }).setOrigin(0.5));
-    if (opened) d(this.add.text(W / 2, 490, 'Открыта новая трасса!', { fontFamily: FONT, fontSize: '34px', color: '#ffd166' }).setOrigin(0.5));
-    d(button(this, W / 2 - 330, 610, 'Ещё раз', () => this.startRace(this.trackIdx), { w: 280, h: 96, color: 0xe63946 }));
-    d(button(this, W / 2, 610, 'Трассы', () => this.showMenu(), { w: 280, h: 96, color: 0x277da1 }));
-    d(button(this, W / 2 + 330, 610, 'Домой', () => this.scene.start('Menu'), { w: 280, h: 96, color: 0x6c757d }));
-    const lines = [this.ru(`raccoon.race.finish.${stars}`)];
-    if (opened) lines.push(this.ru('raccoon.race.unlock'));
+    d(this.add.text(sx, 310, `${this.childName}, правильных слов: ${this.correct} из ${this.rows.length}`, { fontFamily: FONT, fontSize: newCar ? '32px' : '40px', color: '#ffffff' }).setOrigin(0.5));
+    d(this.add.text(sx, 356, 'Три звезды — 10 слов, две — 7, одна — 5', { fontFamily: FONT, fontSize: '22px', color: '#adb5bd' }).setOrigin(0.5));
+    // coins earned
+    d(this.add.image(sx - 90, 412, 'race-coin').setDisplaySize(50, 50));
+    const coinText = d(this.add.text(sx - 56, 412, `+0`, { fontFamily: FONT, fontSize: '40px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0, 0.5));
+    let shownCoins = 0;
+    this.time.addEvent({
+      delay: 120, repeat: Math.max(0, coins - 1), startAt: 0,
+      callback: () => {
+        shownCoins = Math.min(coins, shownCoins + 1);
+        coinText.setText(`+${shownCoins}`);
+        this.beep([880 + shownCoins * 20], 0.04, 'square', 0.03);
+      },
+    });
+    let y = 462;
+    if (flawless) {
+      d(this.add.text(sx, y, `Без единой ошибки! +${FLAWLESS_BONUS} монет`, { fontFamily: FONT, fontSize: '28px', color: '#7dd3fc' }).setOrigin(0.5));
+      y += 44;
+    }
+    if (opened) d(this.add.text(sx, y, 'Открыта новая трасса!', { fontFamily: FONT, fontSize: '30px', color: '#ffd166' }).setOrigin(0.5));
+    if (newCar) {
+      // the new car drives onto a podium
+      d(this.add.text(950, 160, 'Новая машина!', { fontFamily: FONT, fontSize: '44px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 8 }).setOrigin(0.5));
+      d(this.add.ellipse(950, 400, 380, 70, 0xffd166, 0.9).setStrokeStyle(5, 0xffffff));
+      const img = d(this.add.image(W + 300, 400, `race-car-${newCar.id}`).setOrigin(0.5, 0.92).setScale(0.8));
+      this.tweens.add({ targets: img, x: 950, duration: 1100, delay: 600, ease: 'Back.easeOut' });
+      d(this.add.text(950, 462, newCar.name, { fontFamily: FONT, fontSize: '36px', color: '#ffffff', stroke: '#14213d', strokeThickness: 6 }).setOrigin(0.5));
+      d(button(this, 950, 530, 'Взять в гонку', () => {
+        this.progress = { ...this.progress, car: newCar.id };
+        this.save();
+        this.beep([660, 880], 0.08);
+        void this.talk(english(carLine(newCar.id)));
+      }, { w: 300, h: 70, color: 0x38b000 }));
+    }
+    d(button(this, W / 2 - 330, 640, 'Ещё раз', () => this.startRace(this.trackIdx), { w: 280, h: 96, color: 0xe63946 }));
+    d(button(this, W / 2, 640, 'Трассы', () => this.showMenu(), { w: 280, h: 96, color: 0x277da1 }));
+    d(button(this, W / 2 + 330, 640, 'Домой', () => this.scene.start('Menu'), { w: 280, h: 96, color: 0x6c757d }));
+    const lines: Utterance[] = [this.ru(`raccoon.race.finish.${stars}`)];
+    if (newCar) lines.push(this.ru('raccoon.race.newcar'), english(carLine(newCar.id)));
+    if (opened) lines.push(this.ru(this.trackIdx === 2 ? 'raccoon.race.unlock.plane' : 'raccoon.race.unlock'));
     void this.wait(1400).then((alive) => alive && this.talk(...lines));
   }
+}
+
+/** The plane flew past: the same cards again, in new spots. */
+function reshuffle(cards: Card[], track: Track, rng: Rng): Card[] {
+  const spots: { lane: number; h: number }[] = [];
+  for (let h = 0; h < track.heights; h++) for (let l = 0; l < track.lanes; l++) spots.push({ lane: l, h });
+  const place = shuffle(rng, spots);
+  return shuffle(rng, cards).map((c, i) => ({ word: c.word, ...place[i]! }));
 }
