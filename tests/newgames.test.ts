@@ -17,11 +17,31 @@ describe('anchor', () => {
     for (let level = 1; level <= anchor.MAX_LEVEL; level++) {
       const s = anchor.LEVELS[level]!;
       for (const t of anchor.planTargets(level, rng, 50)) {
-        expect(t > 0 && t < s.max && t % s.step === 0).toBe(true);
+        expect(t > 0 && t < s.max && t % s.step === 0 && !s.landmarks.includes(t)).toBe(true);
         expect(clips.has(`en.${anchor.numberWord(t)}`), String(t)).toBe(true);
       }
     }
     expect(clips.has('en.anchor.drop')).toBe(true);
+  });
+  it('climbs 0–20, 0–30, 0–40 with landmarks first, then reverse rounds', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => anchor.LEVELS[l]!.max)).toEqual([10, 20, 20, 30, 30, 40, 40, 100, 100]);
+    for (let level = 1; level <= anchor.MAX_LEVEL; level++)
+      for (let seed = 1; seed < 15; seed++) {
+        const rs = anchor.planRounds(level, mulberry32(seed));
+        expect(rs).toHaveLength(anchor.ROUNDS);
+        const names = rs.filter((r) => r.kind === 'name');
+        expect(names).toHaveLength(anchor.LEVELS[level]!.reverse);
+        for (const r of names) {
+          expect(r.options).toHaveLength(3);
+          expect(r.options).toContain(r.target);
+          expect(new Set(r.options).size).toBe(3);
+        }
+      }
+    // Old saves keep their place on the new ladder.
+    expect(anchor.migrateLevel({ level: 2 })).toBe(3);
+    expect(anchor.migrateLevel({ level: 3 })).toBe(8);
+    expect(anchor.migrateLevel({ level: 5, v: 2 })).toBe(5);
+    expect(anchor.migrateLevel({})).toBe(1);
   });
   it('scores percent error and adapts', () => {
     expect(anchor.pae(7, 6, 10)).toBe(10);
@@ -29,7 +49,7 @@ describe('anchor', () => {
     expect(anchor.verdict(20)).toBe('far');
     expect(anchor.nextLevel(1, 5)).toBe(2);
     expect(anchor.nextLevel(2, 25)).toBe(1);
-    for (const id of ['hello', 'again', 'exact', 'close', 'far', 'more', 'less', 'end', 'levelup']) expect(ph[`rumb.anchor.${id}`], id).toBeDefined();
+    for (const id of ['hello', 'again', 'exact', 'close', 'far', 'more', 'less', 'end', 'levelup', 'marks', 'which']) expect(ph[`rumb.anchor.${id}`], id).toBeDefined();
   });
 });
 
