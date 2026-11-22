@@ -3,7 +3,7 @@ import { english, type Utterance } from '../../core/phrases';
 import { voice } from '../../core/audio';
 import { button, FONT, H, W } from '../../scenes/ui';
 import type { Rng } from '../common/rng';
-import { CARS, carLine, MAX_NITRO, nextCar, nitroPrice, type Progress } from './logic';
+import { CARS, carLine, MAX_NITRO, nextCar, nextPlane, nitroPrice, PLANES, planeLine, type Car, type Progress } from './logic';
 
 /** What the garage and the pit stop borrow from the race scene. */
 export interface Host {
@@ -35,7 +35,7 @@ export function runGarage(host: Host, run: number): Promise<void> {
     bg.fillGradientStyle(0x2b2d42, 0x2b2d42, 0x14213d, 0x14213d, 1).fillRect(0, 0, W, H);
     // garage floor stripes
     for (let i = 0; i < 20; i++) bg.fillStyle(0xffd166, 0.9).fillRect(i * 70, 448, 35, 10);
-    k(sc.add.text(W / 2, 44, 'Гараж', { fontFamily: FONT, fontSize: '56px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 10 }).setOrigin(0.5));
+    k(sc.add.text(850, 44, 'Гараж', { fontFamily: FONT, fontSize: '56px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 10 }).setOrigin(0.5));
     k(button(sc, 1170, 46, 'Назад', () => done(), { w: 170, h: 64, color: 0x6c757d }));
     const rac = k(sc.add.image(80, 70, 'char-raccoon').setDisplaySize(120, 120));
     const sub = k(
@@ -47,33 +47,57 @@ export function runGarage(host: Host, run: number): Promise<void> {
     );
     host.setRaccoon(rac, sub);
 
-    // ---- cars ----
-    const rings: Phaser.GameObjects.Rectangle[] = [];
+    // ---- cars and planes (two tabs) ----
+    let air = false;
+    let grid: Phaser.GameObjects.GameObject[] = [];
     const drawCars = () => {
+      grid.forEach((o) => o.destroy());
+      grid = [];
+      const g = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+        grid.push(k(o));
+        return o;
+      };
       const p = host.progress();
-      const next = nextCar(p);
-      CARS.forEach((c, i) => {
+      const list: readonly Car[] = air ? PLANES : CARS;
+      const owned = air ? p.planes : p.cars;
+      const chosen = air ? p.plane : p.car;
+      const next = air ? nextPlane(p) : nextCar(p);
+      const rings: Phaser.GameObjects.Rectangle[] = [];
+      list.forEach((c, i) => {
         const x = 118 + (i % 6) * 209;
         const y = 175 + Math.floor(i / 6) * 150;
-        const own = p.cars.includes(c.id);
-        const ring = k(sc.add.rectangle(x, y, 196, 138, 0xffffff, c.id === p.car ? 0.9 : 0.1).setStrokeStyle(4, c.id === p.car ? 0xffd166 : 0x495057));
+        const own = owned.includes(c.id);
+        const ring = g(sc.add.rectangle(x, y, 196, 138, 0xffffff, c.id === chosen ? 0.9 : 0.1).setStrokeStyle(4, c.id === chosen ? 0xffd166 : 0x495057));
         rings[i] = ring;
-        const img = k(sc.add.image(x, y - 4, `race-car-${c.id}`).setScale(0.38));
+        const img = g(sc.add.image(x, y - 4, `${air ? 'race-plane' : 'race-car'}-${c.id}`).setScale(air ? 0.36 : 0.38));
         if (!own) img.setTintFill(0x14213d).setAlpha(0.8);
-        k(sc.add.text(x, y + 52, own ? c.name : c === next ? 'следующая' : '?', { fontFamily: FONT, fontSize: '20px', color: c.id === p.car ? '#14213d' : '#ffffff' }).setOrigin(0.5));
+        g(sc.add.text(x, y + 52, own ? c.name : c === next ? 'следующ' + (air ? 'ий' : 'ая') : '?', { fontFamily: FONT, fontSize: '20px', color: c.id === chosen ? '#14213d' : '#ffffff' }).setOrigin(0.5));
         ring.setInteractive({ useHandCursor: true }).on('pointerup', () => {
           if (!own) {
-            void host.talk(host.ru('raccoon.race.garage'));
+            void host.talk(host.ru(air ? 'raccoon.race.hangar' : 'raccoon.race.garage'));
             return;
           }
-          host.setProgress({ ...host.progress(), car: c.id });
-          CARS.forEach((cc, j) => rings[j]!.setFillStyle(0xffffff, cc.id === c.id ? 0.9 : 0.1).setStrokeStyle(4, cc.id === c.id ? 0xffd166 : 0x495057));
+          host.setProgress(air ? { ...host.progress(), plane: c.id } : { ...host.progress(), car: c.id });
+          list.forEach((cc, j) => rings[j]!.setFillStyle(0xffffff, cc.id === c.id ? 0.9 : 0.1).setStrokeStyle(4, cc.id === c.id ? 0xffd166 : 0x495057));
           host.beep([660, 880], 0.08);
           sc.tweens.add({ targets: img, y: img.y - 14, yoyo: true, duration: 180 });
-          void host.talk(english(carLine(c.id)));
+          void host.talk(english(air ? planeLine(c.id) : carLine(c.id)));
         });
       });
     };
+    const tabs = [
+      { label: 'Машины', x: 330, plane: false },
+      { label: 'Самолёты', x: 540, plane: true },
+    ].map((t) => {
+      const b = k(button(sc, t.x, 46, t.label, () => {
+        if (air === t.plane) return;
+        air = t.plane;
+        tabs.forEach((x, i) => x.setAlpha(i === (air ? 1 : 0) ? 1 : 0.55));
+        drawCars();
+      }, { w: 190, h: 60, color: 0x277da1 }));
+      return b;
+    });
+    tabs[1]!.setAlpha(0.55);
     drawCars();
 
     // ---- nitro shop ----
