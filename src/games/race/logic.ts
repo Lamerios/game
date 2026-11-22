@@ -56,6 +56,21 @@ export const carById = (id: CarId) => CARS.find((c) => c.id === id) ?? CARS[0]!;
 
 export const carLine = (id: CarId) => `car.${id}`;
 
+/** Planes: their own collection, won by flights without a mistake. Drawn by planeSvg from the same colours. */
+export const PLANES: readonly Car[] = [
+  { id: 'p-red', name: 'Ласточка', shape: 'super', body: '#e63946', dark: '#9d0208', number: 7, en: 'The red plane!' },
+  { id: 'p-blue', name: 'Стриж', shape: 'super', body: '#3a86ff', dark: '#1d3f8f', number: 3, en: 'The blue plane!' },
+  { id: 'p-white', name: 'Чайка', shape: 'super', body: '#f8f9fa', dark: '#1d3557', number: 1, en: 'The white plane!' },
+  { id: 'p-green', name: 'Колибри', shape: 'super', body: '#38b000', dark: '#1b5e20', number: 9, en: 'The green plane!' },
+  { id: 'p-orange', name: 'Пеликан', shape: 'super', body: '#fb8500', dark: '#9c4a00', number: 4, en: 'The orange plane!' },
+  { id: 'p-purple', name: 'Сова', shape: 'super', body: '#7b2cbf', dark: '#3c096c', number: 6, en: 'The purple plane!' },
+  { id: 'p-black', name: 'Ворон', shape: 'super', body: '#343a40', dark: '#111111', number: 13, en: 'The black plane!' },
+  { id: 'p-gold', name: 'Орёл', shape: 'super', body: '#ffc300', dark: '#b8860b', number: 1, en: 'The gold plane!' },
+];
+export const STARTER_PLANES: readonly CarId[] = ['p-red'];
+export const planeById = (id: CarId) => PLANES.find((c) => c.id === id) ?? PLANES[0]!;
+export const planeLine = (id: CarId) => `plane.${id}`;
+
 export type Pool = 'easy' | 'all' | 'mix' | 'sky';
 export type Vehicle = 'car' | 'plane';
 export interface Track {
@@ -181,6 +196,9 @@ export interface Progress {
   car: CarId;
   /** Cars in the garage. */
   cars: CarId[];
+  /** The chosen plane and the planes in the hangar. */
+  plane: CarId;
+  planes: CarId[];
   /** Best stars per track. */
   stars: number[];
   /** Times each word was missed (crashed into the wrong board instead). */
@@ -205,7 +223,7 @@ export const MAX_NITRO = 3;
 export const FLAWLESS_BONUS = 5;
 
 export const freshProgress = (): Progress => ({
-  car: 'red', cars: [...STARTER_CARS], stars: TRACKS.map(() => 0), misses: {}, seen: {}, coins: 0, nitro: 0, flawless: 0, level: 0,
+  car: 'red', cars: [...STARTER_CARS], plane: 'p-red', planes: [...STARTER_PLANES], stars: TRACKS.map(() => 0), misses: {}, seen: {}, coins: 0, nitro: 0, flawless: 0, level: 0,
 });
 
 /** For saves made before the level existed: the track after the last one with three stars. */
@@ -229,12 +247,15 @@ export function parseProgress(raw: unknown): Progress {
   const known = new Set(CARS.map((c) => c.id));
   const cars = [...STARTER_CARS, ...(Array.isArray(p.cars) ? p.cars.filter((c) => known.has(c) && !STARTER_CARS.includes(c)) : [])];
   const car = typeof p.car === 'string' && cars.includes(p.car) ? p.car : 'red';
+  const knownP = new Set(PLANES.map((c) => c.id));
+  const planes = [...new Set([...STARTER_PLANES, ...(Array.isArray(p.planes) ? p.planes.filter((c) => knownP.has(c)) : [])])];
+  const plane = typeof p.plane === 'string' && planes.includes(p.plane) ? p.plane : STARTER_PLANES[0]!;
   const stars = TRACKS.map((_, i) => {
     const s: unknown = Array.isArray(p.stars) ? p.stars[i] : 0;
     return typeof s === 'number' && Number.isInteger(s) && s >= 0 && s <= 3 ? s : 0;
   });
   return {
-    car, cars: [...new Set(cars)], stars, misses: counts(p.misses, 20), seen: counts(p.seen, 999),
+    car, cars: [...new Set(cars)], plane, planes, stars, misses: counts(p.misses, 20), seen: counts(p.seen, 999),
     coins: nat(p.coins), nitro: nat(p.nitro, MAX_NITRO), flawless: nat(p.flawless),
     level: typeof p.level === 'number' ? Math.min(nat(p.level), TRACKS.length - 1) : guessLevel(stars),
   };
@@ -251,6 +272,14 @@ export const practiceCoins = (correct: number) => Math.ceil(correct / 2);
 
 /** The next car a race without mistakes brings, if any are left. */
 export const nextCar = (p: Progress): Car | undefined => CARS.find((c) => !p.cars.includes(c.id));
+/** The next plane a flight without mistakes brings. */
+export const nextPlane = (p: Progress): Car | undefined => PLANES.find((c) => !p.planes.includes(c.id));
+
+/** What a race without mistakes brings: a car on the road, a plane in the air. */
+export interface Prize {
+  kind: Vehicle;
+  item: Car;
+}
 
 export interface RaceOutcome {
   correct: number;
@@ -259,10 +288,12 @@ export interface RaceOutcome {
   asked: string[];
   /** Cones and storm clouds hit. */
   bumps: number;
+  /** Wrong booster answers (a bigger booster missed, a wrong landing place). */
+  boostMisses?: number;
   rows: number;
 }
 
-export const isFlawless = (o: RaceOutcome) => o.correct === o.rows && o.missed.length === 0 && o.bumps === 0;
+export const isFlawless = (o: RaceOutcome) => o.correct === o.rows && o.missed.length === 0 && o.bumps === 0 && !o.boostMisses;
 
 /**
  * After a race: best stars, coins, a new car for a race without mistakes, word
@@ -270,7 +301,7 @@ export const isFlawless = (o: RaceOutcome) => o.correct === o.rows && o.missed.l
  * and a race without mistakes brings no car: cars are won on the child's own
  * track and above, so an easy track can't be farmed.
  */
-export function recordRace(p: Progress, track: number, o: RaceOutcome): { progress: Progress; newCar?: Car; coins: number; practice: boolean } {
+export function recordRace(p: Progress, track: number, o: RaceOutcome): { progress: Progress; prize?: Prize; coins: number; practice: boolean } {
   const stars = [...p.stars];
   stars[track] = Math.max(stars[track] ?? 0, starsFor(o.correct));
   const misses = { ...p.misses };
@@ -285,11 +316,14 @@ export function recordRace(p: Progress, track: number, o: RaceOutcome): { progre
   const flawless = isFlawless(o);
   const practice = isPractice(p, track);
   const coins = practice ? practiceCoins(o.correct) : o.correct + (flawless ? FLAWLESS_BONUS : 0);
-  const newCar = flawless && !practice ? nextCar(p) : undefined;
-  const cars = newCar ? [...p.cars, newCar.id] : p.cars;
+  const air = TRACKS[track]?.vehicle === 'plane';
+  const won = flawless && !practice ? (air ? nextPlane(p) : nextCar(p)) : undefined;
+  const prize: Prize | undefined = won ? { kind: air ? 'plane' : 'car', item: won } : undefined;
+  const cars = won && !air ? [...p.cars, won.id] : p.cars;
+  const planes = won && air ? [...p.planes, won.id] : p.planes;
   return {
-    progress: { ...p, stars, misses, seen, cars, coins: p.coins + coins, flawless: p.flawless + (flawless ? 1 : 0) },
-    newCar,
+    progress: { ...p, stars, misses, seen, cars, planes, coins: p.coins + coins, flawless: p.flawless + (flawless ? 1 : 0) },
+    prize,
     coins,
     practice,
   };
@@ -319,6 +353,7 @@ export const nitroPrice = (rng: Rng) => int(rng, 3, 9);
 export function englishLines(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const c of CARS) out[carLine(c.id)] = c.en;
+  for (const c of PLANES) out[planeLine(c.id)] = c.en;
   out['race.go'] = 'Go!';
   out['race.great'] = 'Great!';
   out['race.yes'] = 'Yes!';
