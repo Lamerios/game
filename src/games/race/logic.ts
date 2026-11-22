@@ -193,14 +193,29 @@ export interface Progress {
   nitro: number;
   /** Races without a single mistake. */
   flawless: number;
+  /**
+   * The child's own track (0-based), raised and lowered by the smart level
+   * after each race. New cars and full coins come only here and above;
+   * easier tracks are practice.
+   */
+  level: number;
 }
 
 export const MAX_NITRO = 3;
 export const FLAWLESS_BONUS = 5;
 
 export const freshProgress = (): Progress => ({
-  car: 'red', cars: [...STARTER_CARS], stars: TRACKS.map(() => 0), misses: {}, seen: {}, coins: 0, nitro: 0, flawless: 0,
+  car: 'red', cars: [...STARTER_CARS], stars: TRACKS.map(() => 0), misses: {}, seen: {}, coins: 0, nitro: 0, flawless: 0, level: 0,
 });
+
+/** For saves made before the level existed: the track after the last one with three stars. */
+function guessLevel(stars: number[]): number {
+  let lvl = 0;
+  stars.forEach((s, i) => {
+    if (s >= 3) lvl = Math.max(lvl, Math.min(i + 1, TRACKS.length - 1));
+  });
+  return lvl;
+}
 
 const nat = (v: unknown, max = 1e6) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? Math.min(v, max) : 0);
 function counts(v: unknown, max: number): Record<string, number> {
@@ -221,11 +236,18 @@ export function parseProgress(raw: unknown): Progress {
   return {
     car, cars: [...new Set(cars)], stars, misses: counts(p.misses, 20), seen: counts(p.seen, 999),
     coins: nat(p.coins), nitro: nat(p.nitro, MAX_NITRO), flawless: nat(p.flawless),
+    level: typeof p.level === 'number' ? Math.min(nat(p.level), TRACKS.length - 1) : guessLevel(stars),
   };
 }
 
-/** A track opens once the one before it has at least one star. */
-export const unlocked = (p: Progress, track: number) => track === 0 || (p.stars[track - 1] ?? 0) > 0;
+/** A track opens once the one before it has at least one star, or once the child's level reaches it. */
+export const unlocked = (p: Progress, track: number) => track === 0 || track <= p.level || (p.stars[track - 1] ?? 0) > 0;
+
+/** A track below the child's level: practice, half the coins and no new car. */
+export const isPractice = (p: Progress, track: number) => track < p.level;
+
+/** Half the coins on a practice track. */
+export const practiceCoins = (correct: number) => Math.ceil(correct / 2);
 
 /** The next car a race without mistakes brings, if any are left. */
 export const nextCar = (p: Progress): Car | undefined => CARS.find((c) => !p.cars.includes(c.id));
@@ -242,8 +264,13 @@ export interface RaceOutcome {
 
 export const isFlawless = (o: RaceOutcome) => o.correct === o.rows && o.missed.length === 0 && o.bumps === 0;
 
-/** After a race: best stars, coins, a new car for a race without mistakes, word counts. */
-export function recordRace(p: Progress, track: number, o: RaceOutcome): { progress: Progress; newCar?: Car; coins: number } {
+/**
+ * After a race: best stars, coins, a new car for a race without mistakes, word
+ * counts. On a practice track (below the child's level) the coins are halved
+ * and a race without mistakes brings no car: cars are won on the child's own
+ * track and above, so an easy track can't be farmed.
+ */
+export function recordRace(p: Progress, track: number, o: RaceOutcome): { progress: Progress; newCar?: Car; coins: number; practice: boolean } {
   const stars = [...p.stars];
   stars[track] = Math.max(stars[track] ?? 0, starsFor(o.correct));
   const misses = { ...p.misses };
@@ -256,15 +283,34 @@ export function recordRace(p: Progress, track: number, o: RaceOutcome): { progre
   const seen = { ...p.seen };
   for (const id of o.asked) seen[id] = Math.min((seen[id] ?? 0) + 1, 999);
   const flawless = isFlawless(o);
-  const coins = o.correct + (flawless ? FLAWLESS_BONUS : 0);
-  const newCar = flawless ? nextCar(p) : undefined;
+  const practice = isPractice(p, track);
+  const coins = practice ? practiceCoins(o.correct) : o.correct + (flawless ? FLAWLESS_BONUS : 0);
+  const newCar = flawless && !practice ? nextCar(p) : undefined;
   const cars = newCar ? [...p.cars, newCar.id] : p.cars;
   return {
     progress: { ...p, stars, misses, seen, cars, coins: p.coins + coins, flawless: p.flawless + (flawless ? 1 : 0) },
     newCar,
     coins,
+    practice,
   };
 }
+
+// ---------- the smart level ----------
+
+/** Smart-level rules for the race: levels 1..5 are the tracks. */
+export const LEVEL_RULES = { maxLevel: TRACKS.length, minLevel: 1, up: 0.9, down: 0.6 } as const;
+
+/**
+ * What the race tells the smart level: words, booster answers, and every cone
+ * or storm cloud hit counts as a wrong answer. Only races on the child's own
+ * track or above move the level (practice below changes nothing).
+ */
+export function levelStats(o: RaceOutcome, boostRight: number, boostTotal: number): { right: number; total: number } {
+  return { right: o.correct + boostRight, total: o.rows + boostTotal + o.bumps };
+}
+
+/** Puts the smart level's decision (1-based) into the progress. */
+export const withLevel = (p: Progress, level1: number): Progress => ({ ...p, level: Math.max(0, Math.min(TRACKS.length - 1, level1 - 1)) });
 
 /** A nitro costs 3 to 9 coins; the price changes so counting stays a task. */
 export const nitroPrice = (rng: Rng) => int(rng, 3, 9);

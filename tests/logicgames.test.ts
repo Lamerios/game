@@ -15,7 +15,8 @@ describe('jam (harbour sliding puzzle)', () => {
     for (let level = 1; level <= jam.MAX_LEVEL; level++) {
       let sum = 0;
       for (let i = 0; i < 4; i++) {
-        const p = jam.generate(level, rng, 600, 400);
+        // No wall-clock cut-off here: on a slow CI runner it made the result depend on machine speed.
+        const p = jam.generate(level, rng, 600, Infinity);
         expect(jam.fits(p.boats)).toBe(true);
         expect(jam.solved(p.boats)).toBe(false);
         // No other horizontal boat shares the exit row.
