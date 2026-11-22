@@ -15,7 +15,7 @@ import {
 import { runGarage } from './garage';
 import { runPitStop } from './pitstop';
 import {
-  BOOST_AFTER, boosterTask, boostSteps, carById, carLine, CARS, CRASHES_TO_PIT, FLAWLESS_BONUS, isFlawless, landingOptions, LINE_MAX, freshProgress, parseProgress, planRace, PRAISE_LINES,
+  BOOST_AFTER, boosterTask, boostSteps, carById, carLine, CARS, PLANES, planeLine, CRASHES_TO_PIT, FLAWLESS_BONUS, isFlawless, landingOptions, LINE_MAX, freshProgress, parseProgress, planRace, PRAISE_LINES,
   isPractice, LEVEL_RULES, levelStats, recordRace, ROWS_PER_RACE, withLevel, starsFor, TRACKS, unlocked, type BoostTask, type Card, type Progress, type Row, type Track,
 } from './logic';
 
@@ -212,10 +212,8 @@ export class RaceScene extends Phaser.Scene {
       'race-lamp-off': lampSvg(false), 'race-lamp-on': lampSvg(true), 'race-storm': STORM, 'race-island': ISLAND, 'race-ship': SHIP,
       'race-coin': COIN, 'race-nitro': NITRO, 'race-part': PART, 'race-garage': GARAGE,
     };
-    for (const c of CARS) {
-      svgs[`race-car-${c.id}`] = carSvg(c);
-      svgs[`race-plane-${c.id}`] = planeSvg(c);
-    }
+    for (const c of CARS) svgs[`race-car-${c.id}`] = carSvg(c);
+    for (const c of PLANES) svgs[`race-plane-${c.id}`] = planeSvg(c);
     for (const c of COLORS) svgs[`race-${c.id}`] = colorBlobSvg(c.paint);
     for (const [time, pal] of Object.entries(PALETTES)) {
       svgs[`race-skyline-${time}`] = skylineSvg(pal);
@@ -402,12 +400,12 @@ export class RaceScene extends Phaser.Scene {
     this.keep(this.add.text(860, 320, `${this.progress.nitro}`, { fontFamily: FONT, fontSize: '40px', color: '#7dd3fc', fontStyle: 'bold' }).setOrigin(0, 0.5));
     this.keep(
       this.add
-        .text(1000, 320, `Машин: ${this.progress.cars.length} из ${CARS.length}\nБез ошибок: ${this.progress.flawless}`, { fontFamily: FONT, fontSize: '26px', color: '#ffffff', lineSpacing: 6 })
+        .text(1000, 320, `Машин: ${this.progress.cars.length} из ${CARS.length}\nСамолётов: ${this.progress.planes.length} из ${PLANES.length}\nБез ошибок: ${this.progress.flawless}`, { fontFamily: FONT, fontSize: '26px', color: '#ffffff', lineSpacing: 6 })
         .setOrigin(0, 0.5),
     );
     this.keep(
       this.add
-        .text(760, 400, `Гонка без ошибок на трассе «${TRACKS[this.progress.level]!.name}» и труднее — новая машина!`, { fontFamily: FONT, fontSize: '22px', color: '#adb5bd', align: 'center', wordWrap: { width: 700 } })
+        .text(760, 400, `Без ошибок на трассе «${TRACKS[this.progress.level]!.name}» и труднее — новая машина или самолёт!`, { fontFamily: FONT, fontSize: '22px', color: '#adb5bd', align: 'center', wordWrap: { width: 700 } })
         .setOrigin(0.5),
     );
 
@@ -430,7 +428,7 @@ export class RaceScene extends Phaser.Scene {
       }
       gr.lineStyle(6, open ? 0xffd166 : 0x6c757d).strokeRoundedRect(-115, -85, 230, 170, 16);
       card.add(gr);
-      if (t.vehicle === 'plane') card.add(this.add.image(0, 34, `race-plane-${car.id}`).setDisplaySize(105, 65));
+      if (t.vehicle === 'plane') card.add(this.add.image(0, 34, `race-plane-${this.progress.plane}`).setDisplaySize(105, 65));
       card.add(this.add.text(0, -62, t.name, { fontFamily: FONT, fontSize: '22px', color: '#ffffff', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 6 }).setOrigin(0.5));
       card.add(this.add.text(0, -30, t.vehicle === 'car' ? `машина · ${t.lanes} полосы` : 'самолёт', { fontFamily: FONT, fontSize: '17px', color: '#14213d', backgroundColor: '#ffd166', padding: { x: 6, y: 2 } }).setOrigin(0.5));
       const stars = this.progress.stars[i] ?? 0;
@@ -584,7 +582,7 @@ export class RaceScene extends Phaser.Scene {
 
     // the car
     this.car = this.plane
-      ? this.keep(this.add.image(W / 2, CAR_Y, `race-plane-${this.progress.car}`).setOrigin(0.5, 0.9).setDisplaySize(PLANE_PX, (PLANE_PX * PLANE_H) / PLANE_W).setDepth(2000))
+      ? this.keep(this.add.image(W / 2, CAR_Y, `race-plane-${this.progress.plane}`).setOrigin(0.5, 0.9).setDisplaySize(PLANE_PX, (PLANE_PX * PLANE_H) / PLANE_W).setDepth(2000))
       : this.keep(this.add.image(W / 2, CAR_Y, `race-car-${this.progress.car}`).setOrigin(0.5, 1).setDisplaySize(CAR_PX, (CAR_PX * CAR_H) / CAR_W).setDepth(2000));
     this.brakeGlow = this.keep(this.add.ellipse(W / 2, CAR_Y - 90, 320, 60, 0xff3030, 0).setDepth(2001));
 
@@ -741,6 +739,21 @@ export class RaceScene extends Phaser.Scene {
     this.boostTotal++;
     if (guess === right) this.boostRight++;
     title.setText(task.kind === 'sum' ? `${from} + ${task.a} + ${task.b} = ${right}` : v < 0 ? `${from} − ${-v} = ${right}` : `${from} + ${v} = ${right}`);
+    if (guess !== right && v > 0) {
+      // a wrong count burns the booster out: the car stays where it was
+      title.setText(`${title.text}\nНеверно, бустер сгорел!`);
+      this.tele?.event('boost.fizzle', { from, right, guess });
+      this.beep([300, 200, 120], 0.12, 'sawtooth', 0.06);
+      this.cameras.main.shake(250, 0.005);
+      for (let k = 0; k < 8; k++) {
+        const puff = d(this.add.circle(W / 2 + (k - 3.5) * 40, 520, 26, 0x6c757d, 0.8));
+        this.tweens.add({ targets: puff, y: 440 - this.rng() * 60, scale: 1.8, alpha: 0, duration: 900, delay: k * 40 });
+      }
+      if (!(await this.talk(this.ru('raccoon.race.boost.fizzle'), english(`n${right}`)))) return false;
+      if (!(await this.wait(1500, run))) return false;
+      layer.forEach((o) => o.destroy());
+      return this.talk(this.ru('raccoon.race.boost.fizzle.next'));
+    }
     if (task.kind === 'minus') this.cameras.main.shake(300, 0.006);
     // count on (or back), one step per number, in English
     const dir = right >= from ? 1 : -1;
@@ -1402,7 +1415,7 @@ export class RaceScene extends Phaser.Scene {
       run,
       plane: this.plane,
       track: this.trackIdx,
-      carKey: `${this.plane ? 'race-plane' : 'race-car'}-${this.progress.car}`,
+      carKey: this.plane ? `race-plane-${this.progress.plane}` : `race-car-${this.progress.car}`,
     });
     this.raccoon = raccoon;
     this.subtitle = subtitle;
@@ -1419,9 +1432,11 @@ export class RaceScene extends Phaser.Scene {
 
   private showResults() {
     const before = TRACKS.map((_, i) => unlocked(this.progress, i));
-    const outcome = { correct: this.correct, hits: this.hits, missed: this.missed, asked: this.asked, bumps: this.bumps, rows: this.rows.length };
+    const outcome = { correct: this.correct, hits: this.hits, missed: this.missed, asked: this.asked, bumps: this.bumps, rows: this.rows.length, boostMisses: this.boostTotal - this.boostRight };
     const was = this.progress.level;
-    const { progress, newCar, coins, practice } = recordRace(this.progress, this.trackIdx, outcome);
+    const { progress, prize, coins, practice } = recordRace(this.progress, this.trackIdx, outcome);
+    const newCar = prize?.item;
+    const air = prize?.kind === 'plane';
     this.progress = progress;
     // the smart level: only a race on the child's own track or a harder one moves it
     let level: ReturnType<typeof nextLevelSmart> | undefined;
@@ -1437,7 +1452,7 @@ export class RaceScene extends Phaser.Scene {
     const opened = TRACKS.some((_, i) => !before[i] && unlocked(this.progress, i));
     const stars = starsFor(this.correct);
     const flawless = isFlawless(outcome);
-    this.tele?.end({ completed: true, stars, score: this.correct, crashes: this.crashes, bumps: this.bumps, unlocked: opened, coins, flawless, newCar: newCar?.id, practice, level: this.progress.level, ...(level ? levelLog(level) : {}) });
+    this.tele?.end({ completed: true, stars, score: this.correct, crashes: this.crashes, bumps: this.bumps, unlocked: opened, coins, flawless, prize: newCar?.id, practice, level: this.progress.level, ...(level ? levelLog(level) : {}) });
     const d = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
       (this.keep(o) as unknown as Phaser.GameObjects.Components.Depth).setDepth(3300);
       return o;
@@ -1482,23 +1497,23 @@ export class RaceScene extends Phaser.Scene {
     if (opened && !levelUp) d(this.add.text(sx, y, 'Открыта новая трасса!', { fontFamily: FONT, fontSize: '30px', color: '#ffd166' }).setOrigin(0.5));
     if (newCar) {
       // the new car drives onto a podium
-      d(this.add.text(950, 160, 'Новая машина!', { fontFamily: FONT, fontSize: '44px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 8 }).setOrigin(0.5));
+      d(this.add.text(950, 160, air ? 'Новый самолёт!' : 'Новая машина!', { fontFamily: FONT, fontSize: '44px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 8 }).setOrigin(0.5));
       d(this.add.ellipse(950, 400, 380, 70, 0xffd166, 0.9).setStrokeStyle(5, 0xffffff));
-      const img = d(this.add.image(W + 300, 400, `race-car-${newCar.id}`).setOrigin(0.5, 0.92).setScale(0.8));
+      const img = d(this.add.image(W + 300, 400, `${air ? 'race-plane' : 'race-car'}-${newCar.id}`).setOrigin(0.5, 0.92).setScale(0.8));
       this.tweens.add({ targets: img, x: 950, duration: 1100, delay: 600, ease: 'Back.easeOut' });
       d(this.add.text(950, 462, newCar.name, { fontFamily: FONT, fontSize: '36px', color: '#ffffff', stroke: '#14213d', strokeThickness: 6 }).setOrigin(0.5));
       d(button(this, 950, 530, 'Взять в гонку', () => {
-        this.progress = { ...this.progress, car: newCar.id };
+        this.progress = air ? { ...this.progress, plane: newCar.id } : { ...this.progress, car: newCar.id };
         this.save();
         this.beep([660, 880], 0.08);
-        void this.talk(english(carLine(newCar.id)));
+        void this.talk(english(air ? planeLine(newCar.id) : carLine(newCar.id)));
       }, { w: 300, h: 70, color: 0x38b000 }));
     }
     d(button(this, W / 2 - 330, 640, 'Ещё раз', () => this.startRace(this.trackIdx), { w: 280, h: 96, color: 0xe63946 }));
     d(button(this, W / 2, 640, 'Трассы', () => this.showMenu(), { w: 280, h: 96, color: 0x277da1 }));
     d(button(this, W / 2 + 330, 640, 'Домой', () => this.scene.start('Menu'), { w: 280, h: 96, color: 0x6c757d }));
     const lines: Utterance[] = [this.ru(`raccoon.race.finish.${stars}`)];
-    if (newCar) lines.push(this.ru('raccoon.race.newcar'), english(carLine(newCar.id)));
+    if (newCar) lines.push(this.ru(air ? 'raccoon.race.newplane' : 'raccoon.race.newcar'), english(air ? planeLine(newCar.id) : carLine(newCar.id)));
     if (practice && flawless) lines.push(this.ru('raccoon.race.practice.car'));
     if (levelUp) lines.push(this.ru(TRACKS[this.progress.level]!.vehicle === 'plane' && TRACKS[was]!.vehicle === 'car' ? 'raccoon.race.unlock.plane' : 'raccoon.race.levelup'));
     else if (opened) lines.push(this.ru(this.trackIdx === 2 ? 'raccoon.race.unlock.plane' : 'raccoon.race.unlock'));

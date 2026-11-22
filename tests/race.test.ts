@@ -6,7 +6,7 @@ import { mulberry32 } from '../src/games/common/rng';
 import { PICTURES } from '../src/games/snake/logic';
 import {
   BOOST_AFTER, boosterTask, boostSteps, CARS, englishLines, freshProgress, isFlawless, landingOptions, LINE_MAX, makeMaze, mazeDistances, mazeSize,
-  isPractice, LEVEL_RULES, levelStats, nextCar, nitroPrice, practiceCoins, withLevel, numberWords, parseProgress, planRace, poolOf, PRAISE_LINES, recordRace, ROWS_PER_RACE, starsFor, STARTER_CARS, TRACKS, unlocked,
+  isPractice, LEVEL_RULES, nextPlane, PLANES, STARTER_PLANES, levelStats, nextCar, nitroPrice, practiceCoins, withLevel, numberWords, parseProgress, planRace, poolOf, PRAISE_LINES, recordRace, ROWS_PER_RACE, starsFor, STARTER_CARS, TRACKS, unlocked,
   type RaceOutcome,
 } from '../src/games/race/logic';
 
@@ -87,7 +87,7 @@ describe('race', () => {
     let r = recordRace(p, 0, outcome({ correct: 8, hits: ['cat'], missed: ['dog', 'dog'], asked: ['cat', 'dog'] }));
     p = r.progress;
     expect(r.coins).toBe(8);
-    expect(r.newCar).toBeUndefined();
+    expect(r.prize).toBeUndefined();
     expect(p.stars[0]).toBe(2);
     expect(p.misses.dog).toBe(2);
     expect(p.seen).toEqual({ cat: 1, dog: 1 });
@@ -113,7 +113,7 @@ describe('race', () => {
     const got: string[] = [];
     for (let i = 0; i < CARS.length; i++) {
       const r = recordRace(p, 0, clean);
-      if (r.newCar) got.push(r.newCar.id);
+      if (r.prize) got.push(r.prize.item.id);
       p = r.progress;
     }
     expect(p.cars).toHaveLength(CARS.length);
@@ -133,17 +133,17 @@ describe('race', () => {
     // practice: half the coins, no car, no flawless bonus
     let r = recordRace(p, 0, clean);
     expect(r.practice).toBe(true);
-    expect(r.newCar).toBeUndefined();
+    expect(r.prize).toBeUndefined();
     expect(r.coins).toBe(practiceCoins(ROWS_PER_RACE));
     expect(r.coins).toBe(6);
     expect(r.progress.cars).toEqual(p.cars);
     // own track and above: the car and the bonus
     r = recordRace(p, 2, clean);
     expect(r.practice).toBe(false);
-    expect(r.newCar).toBeDefined();
+    expect(r.prize?.kind).toBe('car');
     expect(r.coins).toBe(ROWS_PER_RACE + 5);
     r = recordRace(p, 3, clean);
-    expect(r.newCar).toBeDefined();
+    expect(r.prize?.kind).toBe('plane');
     // the level opens tracks and survives a save
     expect(unlocked(p, 2)).toBe(true);
     expect(unlocked(p, 3)).toBe(false);
@@ -164,6 +164,37 @@ describe('race', () => {
   it('counts cones and booster answers in the smart-level stats', () => {
     expect(levelStats(outcome({ correct: 12, bumps: 2 }), 5, 6)).toEqual({ right: 17, total: 20 });
     expect(LEVEL_RULES.maxLevel).toBe(TRACKS.length);
+  });
+
+  it('gives a new plane for a flight without mistakes, on the own track or harder', () => {
+    const plane = TRACKS.findIndex((t) => t.vehicle === 'plane');
+    const clean = outcome({ correct: ROWS_PER_RACE });
+    let p = { ...freshProgress(), level: plane };
+    expect(p.planes).toEqual([...STARTER_PLANES]);
+    const got: string[] = [];
+    for (let i = 0; i < PLANES.length + 1; i++) {
+      const r = recordRace(p, plane, clean);
+      if (r.prize) {
+        expect(r.prize.kind).toBe('plane');
+        got.push(r.prize.item.id);
+      }
+      p = r.progress;
+    }
+    expect(got).toEqual(PLANES.slice(STARTER_PLANES.length).map((c) => c.id));
+    expect(p.cars).toEqual([...STARTER_CARS]);
+    expect(nextPlane(p)).toBeUndefined();
+    expect(parseProgress(JSON.parse(JSON.stringify({ ...p, plane: 'p-gold' }))).plane).toBe('p-gold');
+    // a plane track below the level is practice
+    expect(recordRace({ ...freshProgress(), level: TRACKS.length - 1 }, plane, clean).prize).toBeUndefined();
+    // old saves get the starter plane
+    expect(parseProgress({ car: 'blue' })).toMatchObject({ plane: 'p-red', planes: ['p-red'] });
+  });
+
+  it('a wrong booster answer breaks a race without mistakes', () => {
+    const clean = outcome({ correct: ROWS_PER_RACE });
+    expect(isFlawless({ ...clean, boostMisses: 1 })).toBe(false);
+    expect(recordRace(freshProgress(), 0, { ...clean, boostMisses: 1 }).prize).toBeUndefined();
+    expect(recordRace(freshProgress(), 0, { ...clean, boostMisses: 0 }).prize?.kind).toBe('car');
   });
 
   it('opens the plane after the car tracks', () => {
