@@ -19,7 +19,7 @@ const EXTRA_GAMES: Record<string, string> = { voyage: 'Кругосветка', 
 export const gameName = (id: string) => gameById(id)?.title ?? EXTRA_GAMES[id] ?? id;
 
 const RU = new Map(WORDS.map((w) => [w.id, w.ru]));
-/** 'apple' → 'apple (яблоко)', 'take.boat' → 'Take the boat!', 'n13' → 'thirteen (13)'. */
+/** 'apple' → 'apple (яблоко)', 'to.lion' → 'Take the parcel to the lion!', 'n13' → 'thirteen (13)'. */
 export function itemName(item: string): string {
   const en = ENGLISH[item];
   const ru = RU.get(item);
@@ -102,7 +102,7 @@ function readLocal<T>(key: string): T | undefined {
 }
 
 /** Game data that lives in localStorage (per-game progress), included in the export. */
-const LOCAL_KEYS = ['snake-words', 'english-words', 'word-log', 'parcel-progress', 'race-progress', 'menu-opened', 'yunga-smart-level'];
+const LOCAL_KEYS = ['snake-words', 'english-words', 'word-log', 'parcel-progress', 'parcel-route-level', 'race-progress', 'menu-opened', 'yunga-smart-level'];
 
 export function openDashboard(state: GameState, onChange: () => void) {
   if (document.querySelector('.pd')) return;
