@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { preloadArt } from '../art/load';
 import { voice } from '../core/audio';
 import { GameState } from '../game-state';
+import { setChildName } from '../core/phrases';
+import { onSynced, startSync, syncedProfile } from '../core/sync/sync';
 import { gameByHash } from '../games/registry';
 import { button, FONT, H, W } from './ui';
 
@@ -20,8 +22,15 @@ export class BootScene extends Phaser.Scene {
   }
 
   async create() {
-    const [state] = await Promise.all([GameState.load(), voice.init()]);
+    // Newest progress from the family's other devices first (waits a few seconds at most, offline it skips).
+    const [state] = await Promise.all([startSync().then(() => GameState.load()), voice.init()]);
     this.registry.set('state', state);
+    onSynced((r) => {
+      const p = syncedProfile(r);
+      if (!p) return;
+      state.profile = p;
+      setChildName(p.childName);
+    });
     // …/game/#snake, #race, #voyage… open that game straight away (after one tap, which unlocks sound).
     const direct = gameByHash(location.hash);
     if (!direct) {

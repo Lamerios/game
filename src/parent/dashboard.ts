@@ -6,6 +6,8 @@ import type { GameState } from '../game-state';
 import { GAMES, SKILL_LABEL, gameById } from '../games/registry';
 import { WORDS } from '../games/snake/logic';
 import { firstTries, loadStats } from '../core/wordStats';
+import { normalizeCode, prettyCode } from '../core/sync/merge';
+import { createFamily, familyLink, readConfig, setCode, setUrl, syncAvailable, syncNow, syncUrl } from '../core/sync/sync';
 
 /**
  * Parent dashboard: an HTML overlay above the game (tables, charts, files are
@@ -49,6 +51,7 @@ const CSS = `
 .pd button.danger{background:#e63946;color:#fff}
 .pd button.on{background:#14365a;color:#fff}
 .pd header button.on{background:#ffb703;color:#3d2400;font-weight:700}
+.pd button:disabled{opacity:.45;cursor:default}
 .pd .close{background:#fff;color:#14365a;font-weight:700}
 .pd nav{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;background:#fff;border-bottom:1px solid #dde3ea}
 @media (max-width:700px){.pd header{position:static}.pd header .sub{display:block}.pd .kpi b{font-size:22px}}
@@ -266,7 +269,36 @@ export function openDashboard(state: GameState, onChange: () => void) {
       )}</td></tr>`).join('')}</table></div></section>`;
   };
 
+  const syncSection = () => {
+    const cfg = readConfig();
+    const last = cfg.last
+      ? `<p class="${cfg.last.ok ? 'muted' : ''}">Последняя синхронизация: ${fmtTime(cfg.last.at)} — ${esc(cfg.last.msg)}${cfg.last.ok && cfg.last.devices ? ` · устройств в семье: ${cfg.last.devices}` : ''}</p>`
+      : '';
+    const server = `<details${syncAvailable() ? '' : ' open'}><summary class="muted">Адрес сервера синхронизации</summary>
+        <div class="row" style="margin-top:8px"><input data-sync="url" placeholder="https://functions.yandexcloud.net/…" value="${esc(cfg.url ?? '')}" style="flex:1 1 280px;font:inherit;padding:8px;border-radius:10px;border:1px solid #dde3ea">
+        <button data-act="sync-url">Сохранить адрес</button></div>
+        <p class="muted">${syncAvailable() ? `Сейчас: ${esc(syncUrl())}` : 'Сервер ещё не подключён: вставьте адрес функции Yandex Cloud (инструкция в docs/sync.md).'}</p></details>`;
+    if (!cfg.code) {
+      return `<section><h2>Синхронизация между устройствами</h2>
+        <p>Прогресс и статистика сейчас хранятся только в этом браузере. Включите синхронизацию, чтобы ноутбук, телефон и другие браузеры продолжали с одного места. Без интернета игра работает как обычно и досинхронизируется позже.</p>
+        <div class="row"><button class="primary" data-act="sync-create"${syncAvailable() ? '' : ' disabled'}>Включить на этом устройстве</button></div>
+        <div class="row"><input data-sync="code" placeholder="Код с другого устройства: xxxx-xxxx-xxxx-xxxx" style="flex:1 1 260px;font:inherit;padding:8px;border-radius:10px;border:1px solid #dde3ea">
+          <button data-act="sync-join"${syncAvailable() ? '' : ' disabled'}>Подключить по коду</button></div>
+        ${server}</section>`;
+    }
+    return `<section><h2>Синхронизация между устройствами</h2>
+      <p>Код семьи: <b style="font-size:22px;letter-spacing:.05em">${esc(prettyCode(cfg.code))}</b></p>
+      <p class="muted">На другом устройстве откройте ссылку ниже или введите этот код в «Для родителей → Данные». Код — как ключ: не публикуйте его.</p>
+      <div class="row">
+        <button class="primary" data-act="sync-now">Синхронизировать сейчас</button>
+        <button data-act="sync-copy">Скопировать ссылку для другого устройства</button>
+        <button class="danger" data-act="sync-off">Отключить на этом устройстве</button>
+      </div>
+      ${last}${server}</section>`;
+  };
+
   const dataTab = () => `
+    ${syncSection()}
     <section><h2>Выгрузка для анализа</h2>
       <p>Все данные хранятся только в этом браузере. Выгрузите файл и пришлите его Claude для следующего витка улучшений: JSON — полный (события, прогресс плавания, прогресс мини-игр), CSV — таблица событий для Excel/Google Sheets, отчёт — сводка в Markdown.</p>
       <div class="row">
@@ -315,6 +347,18 @@ export function openDashboard(state: GameState, onChange: () => void) {
   };
   const stamp = () => dayKey(Date.now());
 
+  const runSync = async (el: HTMLButtonElement) => {
+    el.disabled = true;
+    el.textContent = 'Синхронизирую…';
+    const r = await syncNow();
+    if (r.changed) {
+      changed = true;
+      events = await analytics.all();
+    }
+    toast(r.ok ? (r.changed ? 'Готово: подтянут прогресс с других устройств' : 'Готово: всё уже одинаково') : r.msg);
+    render();
+  };
+
   root.addEventListener('click', async (e) => {
     const el = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
     if (!el) return;
@@ -350,6 +394,45 @@ export function openDashboard(state: GameState, onChange: () => void) {
       }
       case 'import':
         return (el.parentElement?.querySelector('input[type=file]') as HTMLInputElement | null)?.click();
+      case 'sync-create':
+        createFamily();
+        track('parent', 'sync.enable', { how: 'new' });
+        toast('Синхронизация включена');
+        render();
+        return runSync(el);
+      case 'sync-join': {
+        const code = normalizeCode((root.querySelector('input[data-sync=code]') as HTMLInputElement | null)?.value ?? '');
+        if (!code) return toast('Код не похож на код семьи: 16 букв и цифр');
+        setCode(code);
+        track('parent', 'sync.enable', { how: 'code' });
+        render();
+        return runSync(el);
+      }
+      case 'sync-now':
+        return runSync(el);
+      case 'sync-copy': {
+        const link = familyLink(readConfig().code ?? '');
+        try {
+          await navigator.clipboard.writeText(link);
+          toast('Ссылка скопирована');
+        } catch {
+          toast(link);
+        }
+        return;
+      }
+      case 'sync-off':
+        if (!confirmInline(el, 'Точно отключить? Прогресс здесь останется')) return;
+        setCode(undefined);
+        track('parent', 'sync.disable');
+        toast('Синхронизация отключена');
+        return render();
+      case 'sync-url': {
+        const url = (root.querySelector('input[data-sync=url]') as HTMLInputElement | null)?.value ?? '';
+        if (url && !/^(https:\/\/|http:\/\/localhost)/.test(url.trim())) return toast('Адрес должен начинаться с https://');
+        setUrl(url);
+        toast(url ? 'Адрес сохранён' : 'Адрес сброшен');
+        return render();
+      }
       case 'grant':
         await state.grantSession();
         changed = true;

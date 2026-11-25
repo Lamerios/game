@@ -188,6 +188,19 @@ export class Analytics {
     if (this.enabled) await clear(this.db());
   }
 
+  /**
+   * Events from another device (sync). `id` gives each one a key that is the same
+   * on every device, so the same event arriving twice is stored once.
+   */
+  async importSynced(events: GameEvent[], id: (e: GameEvent) => string): Promise<number> {
+    if (!this.enabled) return 0;
+    const rows: [string, GameEvent][] = events
+      .filter((e) => e && e.v === SCHEMA && typeof e.ts === 'number' && typeof e.type === 'string')
+      .map((e) => [`${e.ts.toString(36).padStart(9, '0')}-s${id(e)}`, e]);
+    if (rows.length) await setMany(rows, this.db());
+    return rows.length;
+  }
+
   /** Puts events from an export back (moving to a new device). Duplicates are skipped by key. */
   async importEvents(events: GameEvent[]): Promise<number> {
     if (!this.enabled) return 0;
