@@ -760,8 +760,10 @@ export class RaceScene extends Phaser.Scene {
     for (let n = from + dir; dir > 0 ? n <= right : n >= right; n += dir) {
       this.stepLine(n);
       this.beep([440 + n * 12], 0.08);
+      // say each number to the end: "twenty-seven" takes longer than a step, and the next one would cut it off
       if (n > 0) voice.say(english(`n${n}`));
-      if (!(await this.wait(750, run))) return false;
+      await Promise.all([this.wait(600, run), n > 0 ? voice.idle(2500) : Promise.resolve()]);
+      if (!this.sys.isActive() || run !== this.run) return false;
     }
     layer.forEach((o) => o.destroy());
     return this.talk(guess === right ? this.ru('raccoon.race.where.yes') : this.ru('raccoon.race.where.no'));

@@ -26,6 +26,17 @@ def spoken(text: str) -> str:
 # copy is kept, cut at its first token's start time.
 LEAD_IN = 0.03  # seconds kept before the second copy starts
 FADE = 0.012
+# A word that starts with a hissing sound ("six", "snake", "fish") often has a
+# short voiced blip just before the hiss in the second take, inside the lead-in:
+# "six" was heard as "zix". For such words the cut moves to where the hiss
+# really starts: the first run of HISS_RUN frames of 5 ms that are mostly above
+# 3 kHz and louder than HISS_DB, searched around the token start.
+HISS_START = ("s", "sh", "f", "ch", "z", "x", "ce", "ci", "cy", "th")
+HISS_DB = -55.0
+HISS_HF = 0.55
+HISS_RUN = 4
+HISS_WINDOW = (0.04, 0.2)  # seconds before / after the token start (not back into the first take's "ks", "sh")
+SILENCE_DB = -55
 # The very end of a longer utterance trails off in a breathy hiss, heard as an
 # extra "s" ("bananas"). So the clip also ends shortly after the last word's
 # end time, with a soft fade-out.
@@ -60,6 +71,29 @@ def trim_hiss(pcm: np.ndarray, text: str, sr: int = 24000) -> np.ndarray:
     return pcm[:end]
 
 
+def starts_hissing(text: str) -> bool:
+    w = "".join(c for c in text.lower() if c.isalpha() or c == " ").strip().split(" ")[0]
+    return w.startswith(HISS_START) and w != "the"
+
+
+def hiss_start(pcm: np.ndarray, t: float, sr: int = 24000) -> int | None:
+    """Sample where the hiss of the first sound begins near time t, or None."""
+    fr = int(0.005 * sr)
+    lo = max(0, int((t - HISS_WINDOW[0]) * sr))
+    hi = min(len(pcm) - fr, int((t + HISS_WINDOW[1]) * sr))
+    freqs = np.fft.rfftfreq(fr, 1 / sr)
+    run = 0
+    for i in range(lo, hi, fr):
+        seg = pcm[i:i + fr]
+        db = 20 * np.log10(float(np.sqrt((seg ** 2).mean())) + 1e-12)
+        sp = np.abs(np.fft.rfft(seg))
+        hf = sp[freqs > 3000].sum() / (sp.sum() + 1e-9)
+        run = run + 1 if db > HISS_DB and hf > HISS_HF else 0
+        if run == HISS_RUN:
+            return max(0, i - (HISS_RUN - 1) * fr - fr)
+    return None
+
+
 def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
     line = spoken(text)
     results = [r for r in pipe(f"{line} {line}", voice=voice, speed=speed) if r.audio is not None]
@@ -73,6 +107,10 @@ def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
         if start is not None:
             pcm = r.audio.numpy().astype(np.float32)
             i = max(0, int((start - LEAD_IN) * 24000))
+            if starts_hissing(text):
+                h = hiss_start(pcm, start)
+                if h is not None:
+                    i = h
             words = [t for t in tokens[half:] if any(c.isalnum() for c in t.text) and t.end_ts is not None]
             j = len(pcm)
             if words:
@@ -100,7 +138,8 @@ def encode(pcm: np.ndarray, text: str, out: str) -> str:
     The tail is judged on the clip as it sounds after mp3 encoding (encode, decode,
     trim), which is where the hiss shows; then the trimmed audio is encoded once more.
     """
-    trim = "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse"
+    trim = (f"silenceremove=start_periods=1:start_threshold={SILENCE_DB}dB,areverse,"
+            "silenceremove=start_periods=1:start_threshold=-45dB,areverse")
     mp3 = ffmpeg([*RAW, "-i", "-", "-af", trim, "-ac", "1", "-b:a", "96k", "-f", "mp3", "-"], pcm.astype(np.float32).tobytes())
     x = np.frombuffer(ffmpeg(["-f", "mp3", "-i", "-", *RAW, "-"], mp3), np.float32)
     n0 = len(x)
