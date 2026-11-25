@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { showProgress } from '../common/progressUi';
 import { levelLog, levelNote, nextLevelSmart, statsFromRun } from '../../core/smartLevel';
 import { OL, svg } from '../../art/objects';
 import { startRun, type Run } from '../../core/analytics';
@@ -260,6 +261,7 @@ export class MapPuzzleScene extends Phaser.Scene {
     layer.push(button(this, W / 2 - 170, 440, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));
     layer.push(button(this, W / 2 + 170, 440, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
     layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
+    showProgress(this, { game: 'mappuzzle', level: this.level, stars, next });
     void this.talk(phrase('rumb.map.treasure'));
   }
 }

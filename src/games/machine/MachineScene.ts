@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { showProgress } from '../common/progressUi';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, phrase, type PhraseId, type Utterance } from '../../core/phrases';
@@ -16,6 +17,8 @@ const TOP = 165;
 export class MachineScene extends Phaser.Scene {
   private rng!: Rng;
   private level = 1;
+  /** The level this game started on (the level changes between puzzles). */
+  private startLevel = 1;
   private run?: Run;
   private talkToken = 0;
   private layer: Phaser.GameObjects.GameObject[] = [];
@@ -52,6 +55,7 @@ export class MachineScene extends Phaser.Scene {
     this.add.text(40, 40, `Машина Болтика · уровень ${this.level}`, { fontFamily: FONT, fontSize: '30px', color: '#fff', stroke: '#3d2b1f', strokeThickness: 6 }).setOrigin(0, 0.5);
     button(this, 1190, 40, 'Домой', () => this.leave(), { w: 160, h: 64, color: 0x6c757d });
     this.run = startRun('machine', { level: this.level });
+    this.startLevel = this.level;
     this.events.once('shutdown', () => {
       this.talkToken++;
       voice.stop();
@@ -412,6 +416,7 @@ export class MachineScene extends Phaser.Scene {
     this.keep(button(this, W / 2 - 170, 440, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));
     this.keep(button(this, W / 2 + 170, 440, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
     this.layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
+    showProgress(this, { game: 'machine', level: this.startLevel, stars, next: this.level });
     void this.talk(this.line('end'));
   }
 }

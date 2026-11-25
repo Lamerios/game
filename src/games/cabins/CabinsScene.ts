@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { showProgress } from '../common/progressUi';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { join, phrase, type PhraseId, type Utterance } from '../../core/phrases';
@@ -17,6 +18,8 @@ const tex = (w: Who) => (w === 'strelka' ? 'strelka-4' : `char-${w}`);
 export class CabinsScene extends Phaser.Scene {
   private rng!: Rng;
   private level = 1;
+  /** The level this game started on (the level changes between puzzles). */
+  private startLevel = 1;
   private run?: Run;
   private talkToken = 0;
   private layer: Phaser.GameObjects.GameObject[] = [];
@@ -56,6 +59,7 @@ export class CabinsScene extends Phaser.Scene {
     g.fillGradientStyle(0x8ecae6, 0x8ecae6, 0x219ebc, 0x219ebc).fillRect(0, 0, W, H);
     button(this, 1190, 40, 'Домой', () => this.leave(), { w: 160, h: 64, color: 0x6c757d });
     this.run = startRun('cabins', { level: this.level });
+    this.startLevel = this.level;
     this.events.once('shutdown', () => {
       this.talkToken++;
       voice.stop();
@@ -308,6 +312,7 @@ export class CabinsScene extends Phaser.Scene {
     this.keep(button(this, W / 2 - 170, 440, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));
     this.keep(button(this, W / 2 + 170, 440, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
     this.layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
+    showProgress(this, { game: 'cabins', level: this.startLevel, stars, next: this.level });
     void this.talk(this.line('end'));
   }
 }

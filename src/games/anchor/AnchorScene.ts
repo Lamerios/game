@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { showProgress } from '../common/progressUi';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, join, phrase, type Utterance } from '../../core/phrases';
@@ -237,6 +238,7 @@ export class AnchorScene extends Phaser.Scene {
     layer.push(button(this, W / 2 - 170, 470, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));
     layer.push(button(this, W / 2 + 170, 470, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
     layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
+    showProgress(this, { game: 'anchor', level: this.level, stars, next });
     const lines = [phrase('rumb.anchor.end')];
     if (next > this.level) lines.push(phrase('rumb.anchor.levelup'));
     void this.talk(...lines);

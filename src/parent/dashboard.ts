@@ -102,7 +102,7 @@ function readLocal<T>(key: string): T | undefined {
 }
 
 /** Game data that lives in localStorage (per-game progress), included in the export. */
-const LOCAL_KEYS = ['snake-words', 'english-words', 'word-log', 'parcel-progress', 'parcel-route-level', 'race-progress', 'menu-opened', 'yunga-smart-level'];
+const LOCAL_KEYS = ['snake-words', 'english-words', 'word-log', 'parcel-progress', 'parcel-route-level', 'race-progress', 'menu-opened', 'yunga-smart-level', 'yunga-progress'];
 
 export function openDashboard(state: GameState, onChange: () => void) {
   if (document.querySelector('.pd')) return;
