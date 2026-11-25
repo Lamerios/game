@@ -34,6 +34,10 @@ import { voice } from './core/audio';
 import { setupFullscreen } from './core/fullscreen';
 import { BUILD } from './parent/dashboard';
 import { COLORS, H, W } from './scenes/ui';
+import { installStamps } from './core/sync/stamps';
+
+// Before anything is saved: stamp every write so sync knows which device has the newer progress.
+installStamps();
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

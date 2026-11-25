@@ -1,6 +1,7 @@
 import { createStore, get, set, del, entries, clear, type UseStore } from 'idb-keyval';
 import { SKILLS, type AttemptLog, type Profile } from './types';
 import { DEFAULT_CHILD_NAME, MAX_LEVELS, START_LEVELS } from './profile';
+import { PROFILE_STAMP, stamp } from './sync/stamps';
 
 const PROFILE_KEY = 'profile';
 
@@ -18,8 +19,10 @@ export class Storage {
     return raw === undefined ? undefined : migrate(raw);
   }
 
-  saveProfile(profile: Profile): Promise<void> {
-    return set(PROFILE_KEY, profile, this.profiles);
+  /** `writtenAt` = when the change was made (another device's time when sync brings it). */
+  async saveProfile(profile: Profile, writtenAt = Date.now()): Promise<void> {
+    await set(PROFILE_KEY, profile, this.profiles);
+    stamp(PROFILE_STAMP, writtenAt);
   }
 
   async resetProfile(): Promise<void> {
@@ -29,6 +32,15 @@ export class Storage {
 
   logAttempt(a: AttemptLog): Promise<void> {
     return set(`${a.ts}-${a.skill}-${a.itemId}`, a, this.attempts);
+  }
+
+  /** Attempts with their storage keys (the same on every device), for sync. */
+  attemptEntries(): Promise<[string, AttemptLog][]> {
+    return entries<string, AttemptLog>(this.attempts);
+  }
+
+  async putAttempts(rows: [string, AttemptLog][]): Promise<void> {
+    for (const [k, a] of rows) await set(k, a, this.attempts);
   }
 
   async attemptsSince(ts: number): Promise<AttemptLog[]> {

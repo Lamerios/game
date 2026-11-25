@@ -23,6 +23,10 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run build
+        env:
+          # Address of the progress-sync function (docs/sync.md). A repository variable, not a secret:
+          # it is public anyway, the family code is what protects the data.
+          VITE_SYNC_URL: ${{ vars.SYNC_URL }}
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }
   deploy:
