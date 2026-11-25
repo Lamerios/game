@@ -17,6 +17,8 @@ const BOAT_COLORS = [0x277da1, 0x52b788, 0xffd166, 0x9b5de5, 0xf4a261, 0x4cc9f0,
 
 /** «Затор в гавани»: slide the boats so the yacht can sail out. Planning ahead + spatial. */
 export class JamScene extends Phaser.Scene {
+  /** Gamepad / TV remote: one arrow press moves a picked-up boat by one cell. */
+  readonly padDragStep = CELL;
   private rng!: Rng;
   private level = 1;
   private run?: Run;

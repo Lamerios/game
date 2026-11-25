@@ -32,6 +32,7 @@ import { MenuScene } from './scenes/MenuScene';
 import { analytics, startAppTracking } from './core/analytics';
 import { voice } from './core/audio';
 import { setupFullscreen } from './core/fullscreen';
+import { setupPadControls } from './core/input/pad';
 import { BUILD } from './parent/dashboard';
 import { COLORS, H, W } from './scenes/ui';
 
@@ -47,6 +48,8 @@ const game = new Phaser.Game({
 });
 
 setupFullscreen();
+// Gamepad (USB or Bluetooth, e.g. a laptop on a projector) and TV remote, for every scene.
+setupPadControls(game);
 
 // Event log for the parent dashboard (local only). A line said by the browser voice
 // instead of a recorded clip is logged once per clip, to find gaps in the voice-over.

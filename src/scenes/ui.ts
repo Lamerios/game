@@ -28,6 +28,8 @@ export function button(
   const bg = scene.add.rectangle(0, 0, w, h, opts.color ?? COLORS.wood).setStrokeStyle(6, 0x5c3317);
   const text = scene.add.text(0, 0, label, { fontFamily: FONT, fontSize: '40px', color: '#ffffff' }).setOrigin(0.5);
   const c = scene.add.container(x, y, [bg, text]).setSize(w, h).setInteractive({ useHandCursor: true });
+  // Back on a gamepad or TV remote presses this one.
+  if (/^(Домой|Назад|Выход)$/.test(label.trim())) c.setData('padBack', true);
   c.on('pointerdown', () => c.setScale(0.96));
   c.on('pointerout', () => c.setScale(1));
   c.on('pointerup', () => {

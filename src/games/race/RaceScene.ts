@@ -137,6 +137,11 @@ export class RaceScene extends Phaser.Scene {
   private pos = 0;
   private speed = 0;
   private driving = false;
+
+  /** Gamepad / TV remote steer with arrows while driving; the ring picks buttons in the garage and between laps. */
+  get padMode() {
+    return this.driving ? 'keys' : 'focus';
+  }
   private carX = 0;
   private lane = 1;
   private camX = 0;

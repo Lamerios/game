@@ -102,6 +102,12 @@ export class SnakeScene extends Phaser.Scene {
   private dir: Dir = 'right';
   private queue: Dir[] = [];
   private moving = false;
+  private over = false;
+
+  /** Gamepad / TV remote steer with arrows while playing; the ring picks buttons on the last screen. */
+  get padMode() {
+    return this.over ? 'focus' : 'keys';
+  }
   private paused = true;
   private acc = 0;
   private grow = 0;
@@ -150,6 +156,7 @@ export class SnakeScene extends Phaser.Scene {
     this.dir = 'right';
     this.queue = [];
     this.moving = false;
+    this.over = false;
     this.paused = true;
     this.acc = 0;
     this.grow = 0;
@@ -567,6 +574,7 @@ export class SnakeScene extends Phaser.Scene {
     this.run = undefined;
     this.paused = true;
     this.moving = false;
+    this.over = true;
     this.target = '';
     const layer: Phaser.GameObjects.GameObject[] = [];
     layer.push(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.5).setInteractive());

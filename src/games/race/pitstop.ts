@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { voice } from '../../core/audio';
+import { pushPadMode } from '../../core/input/pad';
 import { english } from '../../core/phrases';
 import { button, FONT, H, W } from '../../scenes/ui';
 import type { Host } from './garage';
@@ -104,6 +105,8 @@ export async function runPitStop(host: Host, o: { run: number; plane: boolean; t
 /** Find the spare part, then drive to the garage. Arrows, swipes, the pad or a tap on the next cell. */
 async function maze(host: Host, run: number, add: <T extends Phaser.GameObjects.GameObject>(g: T) => T, track: number, carKey: string, plane: boolean): Promise<boolean> {
   const sc = host.scene;
+  // Gamepad / TV remote: the arrows drive the car through the maze.
+  const padDone = pushPadMode(sc, 'keys');
   const [cols, rows] = mazeSize(track);
   const m: Maze = makeMaze(cols, rows, host.rng);
   if (import.meta.env.DEV) (window as unknown as { __maze?: Maze }).__maze = m;
@@ -200,10 +203,14 @@ async function maze(host: Host, run: number, add: <T extends Phaser.GameObjects.
     const ty = Math.floor((p.y - y0) / cell) - at.y;
     if (Math.abs(tx) + Math.abs(ty) === 1) move(tx > 0 ? 'right' : tx < 0 ? 'left' : ty > 0 ? 'down' : 'up');
   });
-  if (!(await host.talk(host.ru('raccoon.race.maze')))) return false;
+  if (!(await host.talk(host.ru('raccoon.race.maze')))) {
+    padDone();
+    return false;
+  }
   ready = true;
   await finished;
   sc.input.keyboard?.off('keydown', onKey);
+  padDone();
   if (!host.alive(run)) return false;
   host.beep([523, 659, 784], 0.1);
   return true;
