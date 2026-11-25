@@ -1,5 +1,7 @@
 import { carSvg } from './race/art';
 import { CARS } from './race/logic';
+import { planeSvg } from './flight/art';
+import { PLANES } from './flight/logic';
 import { weaponSvg } from './range/art';
 import { MACHINE_ICON } from './machine/art';
 import { CABINS_ICON } from './cabins/art';
@@ -114,6 +116,16 @@ export const GAMES: GameEntry[] = [
     skills: ['english', 'movement'],
     color: 0xe63946,
     icon: { key: 'menu-race', svg: carSvg(CARS[0]!) },
+  },
+  {
+    id: 'flight',
+    scene: 'Flight',
+    title: 'Полёт слов',
+    subtitle: 'Самолёты и ангар',
+    skills: ['english', 'math', 'movement'],
+    color: 0x0096c7,
+    icon: { key: 'menu-flight', svg: planeSvg(PLANES[0]!) },
+    isNew: true,
   },
   {
     id: 'logbook',
