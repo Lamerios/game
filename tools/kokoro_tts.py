@@ -26,14 +26,17 @@ def spoken(text: str) -> str:
 # copy is kept, cut at its first token's start time.
 LEAD_IN = 0.03  # seconds kept before the second copy starts
 FADE = 0.012
-# A word that starts with a hissing sound ("six", "star") has that quiet "s"
-# before its first token's start time, and it fell below the silence trim:
-# "six" came out as "zix". So the cut walks back from the token start through
-# any sound louder than ONSET_DB (up to ONSET_MAX seconds), stopping in the
-# silence between the two copies, and the silence trim is gentler.
-ONSET_DB = -62.0
-ONSET_MAX = 0.25
-SILENCE_DB = -60
+# A word that starts with a hissing sound ("six", "snake", "fish") often has a
+# short voiced blip just before the hiss in the second take, inside the lead-in:
+# "six" was heard as "zix". For such words the cut moves to where the hiss
+# really starts: the first run of HISS_RUN frames of 5 ms that are mostly above
+# 3 kHz and louder than HISS_DB, searched around the token start.
+HISS_START = ("s", "sh", "f", "ch", "z", "x", "ce", "ci", "cy", "th")
+HISS_DB = -55.0
+HISS_HF = 0.55
+HISS_RUN = 4
+HISS_WINDOW = (0.04, 0.2)  # seconds before / after the token start (not back into the first take's "ks", "sh")
+SILENCE_DB = -55
 # The very end of a longer utterance trails off in a breathy hiss, heard as an
 # extra "s" ("bananas"). So the clip also ends shortly after the last word's
 # end time, with a soft fade-out.
@@ -68,16 +71,27 @@ def trim_hiss(pcm: np.ndarray, text: str, sr: int = 24000) -> np.ndarray:
     return pcm[:end]
 
 
-def onset(pcm: np.ndarray, i: int, sr: int = 24000) -> int:
-    """Moves the cut back while the 5 ms before it still sound (the quiet start of s, f, sh, th)."""
+def starts_hissing(text: str) -> bool:
+    w = "".join(c for c in text.lower() if c.isalpha() or c == " ").strip().split(" ")[0]
+    return w.startswith(HISS_START) and w != "the"
+
+
+def hiss_start(pcm: np.ndarray, t: float, sr: int = 24000) -> int | None:
+    """Sample where the hiss of the first sound begins near time t, or None."""
     fr = int(0.005 * sr)
-    lo = max(0, i - int(ONSET_MAX * sr))
-    while i - fr >= lo:
-        seg = pcm[i - fr:i]
-        if 20 * np.log10(float(np.sqrt((seg ** 2).mean())) + 1e-12) < ONSET_DB:
-            break
-        i -= fr
-    return i
+    lo = max(0, int((t - HISS_WINDOW[0]) * sr))
+    hi = min(len(pcm) - fr, int((t + HISS_WINDOW[1]) * sr))
+    freqs = np.fft.rfftfreq(fr, 1 / sr)
+    run = 0
+    for i in range(lo, hi, fr):
+        seg = pcm[i:i + fr]
+        db = 20 * np.log10(float(np.sqrt((seg ** 2).mean())) + 1e-12)
+        sp = np.abs(np.fft.rfft(seg))
+        hf = sp[freqs > 3000].sum() / (sp.sum() + 1e-9)
+        run = run + 1 if db > HISS_DB and hf > HISS_HF else 0
+        if run == HISS_RUN:
+            return max(0, i - (HISS_RUN - 1) * fr - fr)
+    return None
 
 
 def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
@@ -92,7 +106,11 @@ def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
         start = tokens[half].start_ts if half < len(tokens) else None
         if start is not None:
             pcm = r.audio.numpy().astype(np.float32)
-            i = onset(pcm, max(0, int((start - LEAD_IN) * 24000)))
+            i = max(0, int((start - LEAD_IN) * 24000))
+            if starts_hissing(text):
+                h = hiss_start(pcm, start)
+                if h is not None:
+                    i = h
             words = [t for t in tokens[half:] if any(c.isalnum() for c in t.text) and t.end_ts is not None]
             j = len(pcm)
             if words:
