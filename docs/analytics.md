@@ -65,7 +65,7 @@ track('menu', 'menu.pick', { game: 'snake' });      // разовое событ
 | app | app.error | msg, src | ошибка JavaScript |
 | app | voice.fallback | clip, reason (no_clip / no_audio / load_failed) | реплика сказана голосом браузера (раз на клип за запуск) |
 | menu | menu.open | first | показано главное меню |
-| menu | menu.pick | game | выбрана игра |
+| menu | menu.pick | game, tip, via | выбрана игра; tip = это был совет Румба, via = tap / key (клавиатура, геймпад, пульт) |
 | parent | parent.gate | ok | пример для взрослых решён / нет |
 | parent | dashboard.open / dashboard.tab / dashboard.close / export | tab, kind | работа с панелью |
 | любая | run.start | своё (mode, track, leg, island…) | игра началась |
