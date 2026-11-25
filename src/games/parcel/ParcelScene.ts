@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { showProgress } from '../common/progressUi';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
@@ -684,6 +685,7 @@ export class ParcelScene extends Phaser.Scene {
     this.rumb = this.keep(this.add.image(W / 2 - 330, 300, 'char-rumb').setDisplaySize(130, 130));
     this.keep(button(this, W / 2 - 170, 470, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: COLORS.leaf }));
     this.keep(button(this, W / 2 + 170, 470, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
+    showProgress(this, { game: 'parcel', level: this.level, stars, next: d.level });
     void this.talk(phrase('rumb.route.end'));
   }
 }

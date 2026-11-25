@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { showProgress } from '../common/progressUi';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, phrase, type Utterance } from '../../core/phrases';
@@ -19,6 +20,8 @@ const BOAT_COLORS = [0x277da1, 0x52b788, 0xffd166, 0x9b5de5, 0xf4a261, 0x4cc9f0,
 export class JamScene extends Phaser.Scene {
   private rng!: Rng;
   private level = 1;
+  /** The level this game started on (the level changes between puzzles). */
+  private startLevel = 1;
   private run?: Run;
   private talkToken = 0;
   private layer: Phaser.GameObjects.GameObject[] = [];
@@ -60,6 +63,7 @@ export class JamScene extends Phaser.Scene {
     this.levelText = this.add.text(40, 40, '', { fontFamily: FONT, fontSize: '30px', color: '#fff', stroke: '#0b2233', strokeThickness: 6 }).setOrigin(0, 0.5);
     this.movesText = this.add.text(1060, 160, '', { fontFamily: FONT, fontSize: '30px', color: '#fff', stroke: '#0b2233', strokeThickness: 6, align: 'center' }).setOrigin(0.5, 0);
     this.run = startRun('jam', { level: this.level });
+    this.startLevel = this.level;
     this.events.once('shutdown', () => {
       this.talkToken++;
       voice.stop();
@@ -289,6 +293,7 @@ export class JamScene extends Phaser.Scene {
     this.keep(button(this, W / 2 - 170, 440, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));
     this.keep(button(this, W / 2 + 170, 440, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
     this.layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
+    showProgress(this, { game: 'jam', level: this.startLevel, stars, next: this.level });
     void this.talk(phrase('rumb.jam.end'));
   }
 }

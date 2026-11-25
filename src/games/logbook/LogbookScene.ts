@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { showProgress } from '../common/progressUi';
+import { starsFor } from '../common/collections';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
@@ -214,10 +216,12 @@ export class LogbookScene extends Phaser.Scene {
       }
       if (!(await this.talk(phrase('rumb.logbook.chest')))) return;
     }
-    this.run?.end({ completed: true, score: right, total, choice: this.chosen });
+    const stars = starsFor(right, total);
+    this.run?.end({ completed: true, stars, score: right, total, choice: this.chosen });
     this.run = undefined;
     this.clear();
     this.drawAlbum();
+    showProgress(this, { game: 'logbook', level: 0, stars, y: 676 });
     void this.talk(phrase('rumb.logbook.end'));
   }
 

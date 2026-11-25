@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { showProgress } from '../common/progressUi';
 import { analytics, startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { english, ENGLISH, join, phrase, type PhraseId, type Utterance } from '../../core/phrases';
@@ -686,6 +687,8 @@ export class RangeScene extends Phaser.Scene {
     this.keep(button(this, W / 2 - 250, 520, 'Ещё раз', () => void this.restartRound(), { w: 230, h: 84, color: 0x2a9d8f }).setDepth(22));
     this.keep(button(this, W / 2, 520, 'Оружие', () => void this.openArsenal(false), { w: 230, h: 84, color: 0xe9a23b }).setDepth(22));
     this.keep(button(this, W / 2 + 250, 520, 'Домой', () => goHome(this), { w: 230, h: 84, color: 0x6c757d }).setDepth(22));
+    // In the layer: «Ещё раз» and «Оружие» clear it without restarting the scene.
+    this.keep(showProgress(this, { game: 'range', level: from, stars, next: d.level }).bar);
     void this.talk(phrase(stars === 3 ? 'walrus.range.end' : 'walrus.range.end.more'));
   }
 

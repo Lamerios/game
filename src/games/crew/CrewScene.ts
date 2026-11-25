@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { showProgress } from '../common/progressUi';
 import { levelLog, levelNote, nextLevelSmart, statsFromRun } from '../../core/smartLevel';
 import { startRun, track, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
@@ -377,6 +378,7 @@ export class CrewScene extends Phaser.Scene {
     this.keep(button(this, W / 2 - 170, 440, 'Ещё раз', () => this.scene.restart(), { w: 300, h: 90, color: 0x2a9d8f }));
     this.keep(button(this, W / 2 + 170, 440, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
     this.layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
+    showProgress(this, { game: 'crew', level: this.level, stars, next });
     void this.talk(phrase('rumb.crew.end'));
   }
 }

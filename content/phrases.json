@@ -462,7 +462,9 @@
     "rumb.route.yes.0": "Дост+авлено! Отл+ичный маршр+ут!",
     "rumb.route.yes.1": "Ур+а! Пос+ылка на м+есте!",
     "rumb.route.yes.2": "Вот +это план, {name}!",
-    "rumb.route.end": "Все пос+ылки дост+авлены! Ты насто+ящий шт+урман, {name}!"
+    "rumb.route.end": "Все пос+ылки дост+авлены! Ты насто+ящий шт+урман, {name}!",
+    "rumb.prize.new": "Ур+а! Н+овая накл+ейка в колл+екцию!",
+    "rumb.prize.skin": "Ур+а! У Ш+уши н+овая ш+курка! Над+еть её м+ожно в колл+екции."
   },
   "numbers": {
     "nom": [
@@ -1238,7 +1240,17 @@
       "to.owl": "Take the parcel to the owl!",
       "to.fox": "Take the parcel to the fox!",
       "thanks": "Thank you!",
-      "notme": "Not for me!"
+      "notme": "Not for me!",
+      "snake.skin.green": "The green snake!",
+      "snake.skin.blue": "The blue snake!",
+      "snake.skin.yellow": "The yellow snake!",
+      "snake.skin.red": "The red snake!",
+      "snake.skin.purple": "The purple snake!",
+      "snake.skin.pink": "The pink snake!",
+      "snake.skin.tiger": "The tiger snake!",
+      "snake.skin.zebra": "The zebra snake!",
+      "snake.skin.rainbow": "The rainbow snake!",
+      "snake.skin.gold": "The gold snake!"
     }
   }
 }

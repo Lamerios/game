@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import { loadGame } from '../../core/progress';
+import { skinById, type Skin } from '../common/collections';
+import { showProgress } from '../common/progressUi';
 import { startRun, type Run } from '../../core/analytics';
 import { voice } from '../../core/audio';
 import { dueWords, recordWord } from '../../core/wordLog';
@@ -48,6 +51,8 @@ function colorSvg(paint: string): string {
 }
 
 /** Queues the pictures of these words (texture `snake-<id>`): photos, drawn colours and numbers. Shared with other word games. */
+const RAINBOW = [0xf72585, 0xffd166, 0x80ed99, 0x4cc9f0];
+
 export function preloadWordPictures(scene: Phaser.Scene, ids: readonly string[]) {
   for (const id of ids) {
     if (scene.textures.exists(`snake-${id}`)) continue;
@@ -119,6 +124,9 @@ export class SnakeScene extends Phaser.Scene {
   /** Wrong pictures eaten while the current word was asked, for the parent statistics. */
   private wrongPicks: string[] = [];
   private eaten: string[] = [];
+  /** Wrong pictures eaten this game: stars and the next skin depend on them. */
+  private misses = 0;
+  private skin: Skin = skinById(undefined);
   private talking = false;
   private talkToken = 0;
   private lastSpoken = 0;
@@ -156,6 +164,8 @@ export class SnakeScene extends Phaser.Scene {
     this.items = [];
     this.round = 0;
     this.eaten = [];
+    this.misses = 0;
+    this.skin = skinById(loadGame('snake').chosen);
     this.talking = false;
     this.slots = [];
     this.pad = [];
@@ -466,6 +476,7 @@ export class SnakeScene extends Phaser.Scene {
     this.run?.answer({ item: this.target, correct: item.id === this.target, chosen: item.id === this.target ? undefined : item.id, round: this.round });
     if (item.id !== this.target) {
       this.firstTry = false;
+      this.misses++;
       this.wrongPicks.push(item.id);
       this.cameras.main.shake(120, 0.003);
       this.tweens.add({ targets: item.img, alpha: 0, scale: item.img.scale * 1.6, duration: 400, onComplete: () => item.img.destroy() });
@@ -510,6 +521,7 @@ export class SnakeScene extends Phaser.Scene {
       // Eaten against the rule: named, taken away, the rule said again.
       this.run?.answer({ item: this.target, correct: false, chosen: item.id, ms: Date.now() - this.askedAt, round: this.round, skill: rules ? 'nogo' : 'phonics' });
       this.firstTry = false;
+      this.misses++;
       this.cameras.main.shake(120, 0.003);
       this.tweens.add({ targets: item.img, alpha: 0, scale: item.img.scale * 1.6, duration: 400, onComplete: () => item.img.destroy() });
       this.floatWord(item.id, item.img.x, item.img.y, '#ffffff');
@@ -563,19 +575,21 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private win() {
-    this.run?.end({ completed: true, score: this.eaten.length, mode: this.mode ?? null });
+    // At most one wrong picture = three stars (and the next skin), as in the other games.
+    const stars = this.misses <= 1 ? 3 : this.misses <= 3 ? 2 : 1;
+    this.run?.end({ completed: true, stars, score: this.eaten.length, misses: this.misses, mode: this.mode ?? null });
     this.run = undefined;
     this.paused = true;
     this.moving = false;
     this.target = '';
     const layer: Phaser.GameObjects.GameObject[] = [];
     layer.push(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.5).setInteractive());
-    layer.push(this.add.rectangle(W / 2, H / 2, 1000, 600, 0xfffaf0).setStrokeStyle(8, 0x1b4332));
-    layer.push(this.add.text(W / 2, 100, 'Шуша сыта! Десять слов!', { fontFamily: FONT, fontSize: '48px', color: '#1b4332' }).setOrigin(0.5));
+    layer.push(this.add.rectangle(W / 2, 330, 1000, 580, 0xfffaf0).setStrokeStyle(8, 0x1b4332));
+    layer.push(this.add.text(W / 2, 78, 'Шуша сыта! Десять слов!', { fontFamily: FONT, fontSize: '48px', color: '#1b4332' }).setOrigin(0.5));
     // Every eaten picture with its word; a tap says it again.
     this.eaten.forEach((id, i) => {
       const x = W / 2 - 360 + (i % 5) * 180;
-      const y = 220 + Math.floor(i / 5) * 190;
+      const y = 218 + Math.floor(i / 5) * 172;
       const img = this.add.image(x, y, `snake-${id}`).setDisplaySize(110, 110).setInteractive({ useHandCursor: true });
       img.on('pointerup', () => {
         voice.say(english(id));
@@ -583,9 +597,11 @@ export class SnakeScene extends Phaser.Scene {
       });
       layer.push(img, this.add.text(x, y + 72, en(id), { fontFamily: FONT, fontSize: '30px', color: '#1b4332', fontStyle: 'bold' }).setOrigin(0.5));
     });
-    layer.push(button(this, W / 2 - 170, 580, 'Ещё раз', () => this.scene.restart({ mode: this.mode }), { w: 300, h: 90, color: COLORS.leaf }));
-    layer.push(button(this, W / 2 + 170, 580, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
+    for (let i = 0; i < 3; i++) layer.push(this.add.star(W / 2 - 60 + i * 60, 132, 5, 11, 24, i < stars ? 0xffd166 : 0xdee2e6).setStrokeStyle(3, 0x1b4332));
+    layer.push(button(this, W / 2 - 170, 560, 'Ещё раз', () => this.scene.restart({ mode: this.mode }), { w: 300, h: 90, color: COLORS.leaf }));
+    layer.push(button(this, W / 2 + 170, 560, 'Домой', () => goHome(this), { w: 300, h: 90, color: 0x6c757d }));
     layer.forEach((o) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(20));
+    showProgress(this, { game: 'snake', level: 0, stars, y: 676 });
     void this.talk(phrase('snake.win'));
   }
 
@@ -632,7 +648,7 @@ export class SnakeScene extends Phaser.Scene {
     const near = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < CELL * 1.5;
     const g = this.snake.clear();
     // Outline pass, then fill pass, so the body reads as one tube.
-    for (const [w, color, extra] of [[1, 0x1b4332, 5], [1, 0x52b788, 0]] as const) {
+    for (const [w, color, extra] of [[1, this.skin.outline, 5], [1, this.skin.body, 0]] as const) {
       for (let i = pts.length - 1; i > 0; i--) {
         const a = pts[i]!;
         const b = pts[i - 1]!;
@@ -643,11 +659,11 @@ export class SnakeScene extends Phaser.Scene {
       pts.forEach((p, i) => g.fillStyle(color).fillCircle(p.x, p.y, (i === 0 ? CELL * 0.46 : r(i)) + extra));
     }
     // Back pattern.
-    for (let i = 1; i < pts.length - 1; i += 2) g.fillStyle(0x95d5b2).fillCircle(pts[i]!.x, pts[i]!.y, r(i) * 0.45);
+    for (let i = 1; i < pts.length - 1; i += 2) g.fillStyle(this.skin.id === 'rainbow' ? RAINBOW[((i - 1) / 2) % RAINBOW.length]! : this.skin.pattern).fillCircle(pts[i]!.x, pts[i]!.y, r(i) * 0.45);
     // Head: darker, eyes look where it goes, tongue flicks now and then.
     const h = pts[0]!;
     const d = DIRS[this.dir];
-    g.fillStyle(0x40916c).fillCircle(h.x, h.y, CELL * 0.4);
+    g.fillStyle(this.skin.head).fillCircle(h.x, h.y, CELL * 0.4);
     const side = { x: -d.y, y: d.x };
     for (const s of [-1, 1]) {
       const ex = h.x + d.x * 8 + side.x * 13 * s;
