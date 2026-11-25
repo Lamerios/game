@@ -21,7 +21,8 @@ describe('Game registry', () => {
     const files = sources('src');
     const main = readFileSync('src/main.ts', 'utf8');
     for (const g of GAMES) {
-      const file = files.find((f) => f.includes(`super('${g.scene}')`));
+      // a scene sets its key with super('Key'); a scene that others extend takes it as a default (key = 'Key')
+      const file = files.find((f) => f.includes(`super('${g.scene}')`) || f.includes(`key = '${g.scene}'`));
       expect(file, `scene ${g.scene}`).toBeDefined();
       const cls = file!.match(/export class (\w+) extends/)![1]!;
       expect(main).toMatch(new RegExp(`scene: \\[[^\\]]*\\b${cls}\\b`));

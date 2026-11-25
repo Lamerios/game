@@ -4,23 +4,28 @@ import { voice } from '../../core/audio';
 import { recordWord } from '../../core/wordLog';
 import { levelLog, nextLevelSmart, statsFromRun } from '../../core/smartLevel';
 import { english, ENGLISH, phrase, type PhraseId, type Utterance } from '../../core/phrases';
+import content from '../../../content/phrases.json';
 import type { GameState } from '../../game-state';
 import { button, FONT, H, W } from '../../scenes/ui';
 import { mulberry32, pick, shuffle, type Rng } from '../common/rng';
 import { COLORS, numberOf, PICTURES } from '../snake/logic';
 import {
-  ARCH, BILLBOARD, CAR_H, CAR_W, carSvg, CLOUD, COIN, colorBlobSvg, CONE, GARAGE, houseSvg, ISLAND, lampSvg, MOON, NITRO, PALETTES, PART, PLANE_H, PLANE_W,
-  planeSvg, SHIP, skylineSvg, STAR, STAR_OFF, STORM, SUN, TRAFFIC_LIGHT, TREE, WRENCH, type Palette,
+  ARCH, BILLBOARD, CAR_H, CAR_W, carSvg, CLOUD, COIN, colorBlobSvg, CONE, GARAGE, houseSvg, ISLAND, lampSvg, MOON, NITRO, PALETTES, PART, SHIP, skylineSvg, STAR, STAR_OFF, STORM, SUN, TRAFFIC_LIGHT, TREE, WRENCH, type Palette,
 } from './art';
+import { HANGAR, PLANE_H, PLANE_W, planeSvg } from '../flight/art';
+import { claimPlanes, fromRace, goalProgress, goalText, nextPlane, parseFlight, planeById, planeLine, PLANES, recordFlight, SKY_TRACKS, type Plane } from '../flight/logic';
 import { runGarage } from './garage';
 import { runPitStop } from './pitstop';
 import {
-  BOOST_AFTER, boosterTask, boostSteps, carById, carLine, CARS, PLANES, planeLine, CRASHES_TO_PIT, FLAWLESS_BONUS, isFlawless, landingOptions, LINE_MAX, freshProgress, parseProgress, planRace, PRAISE_LINES,
-  isPractice, LEVEL_RULES, levelStats, recordRace, ROWS_PER_RACE, withLevel, starsFor, TRACKS, unlocked, type BoostTask, type Card, type Progress, type Row, type Track,
+  BOOST_AFTER, boosterTask, boostSteps, carById, carLine, CARS, CAR_TRACKS, CRASHES_TO_PIT, FLAWLESS_BONUS, isFlawless, landingOptions, LINE_MAX, freshProgress, parseProgress, planRace, PRAISE_LINES,
+  isPractice, levelRules, levelStats, recordRace, ROWS_PER_RACE, withLevel, starsFor, unlocked, type BoostTask, type Card, type Progress, type Row, type Track,
 } from './logic';
 
 const STORE_KEY = 'race-progress';
 const HELLO_KEY = 'race-hello';
+const SKY_STORE_KEY = 'flight-progress';
+const SKY_HELLO_KEY = 'flight-hello';
+const PHRASE_IDS = new Set(Object.keys(content.phrases));
 
 // ---------- the pseudo-3D camera ----------
 /** Screen line of the horizon. */
@@ -121,6 +126,8 @@ function mix(c1: number, c2: number, t: number): number {
  * 10 right words = 3 stars, 7 = 2, 5 = 1; a race without mistakes brings a new car.
  */
 export class RaceScene extends Phaser.Scene {
+  /** «Полёт слов» (scene 'Flight'): the same engine with the plane routes, its own save and the hangar. */
+  protected readonly sky: boolean;
   private rng!: Rng;
   private progress: Progress = freshProgress();
   private layer: Phaser.GameObjects.GameObject[] = [];
@@ -199,8 +206,22 @@ export class RaceScene extends Phaser.Scene {
   private subtitle?: Phaser.GameObjects.Text;
   private keys?: Record<string, Phaser.Input.Keyboard.Key>;
 
-  constructor() {
-    super('Race');
+  constructor(key = 'Race') {
+    super(key);
+    this.sky = key === 'Flight';
+  }
+
+  /** Analytics and smart-level game id. */
+  private get gameId() {
+    return this.sky ? 'flight' : 'race';
+  }
+
+  private get tracks(): readonly Track[] {
+    return this.sky ? SKY_TRACKS : CAR_TRACKS;
+  }
+
+  private get vehicleKey() {
+    return this.sky ? `race-plane-${this.progress.plane}` : `race-car-${this.progress.car}`;
   }
 
   preload() {
@@ -214,6 +235,7 @@ export class RaceScene extends Phaser.Scene {
     };
     for (const c of CARS) svgs[`race-car-${c.id}`] = carSvg(c);
     for (const c of PLANES) svgs[`race-plane-${c.id}`] = planeSvg(c);
+    svgs['race-hangar'] = HANGAR;
     for (const c of COLORS) svgs[`race-${c.id}`] = colorBlobSvg(c.paint);
     for (const [time, pal] of Object.entries(PALETTES)) {
       svgs[`race-skyline-${time}`] = skylineSvg(pal);
@@ -224,7 +246,17 @@ export class RaceScene extends Phaser.Scene {
 
   create() {
     this.rng = mulberry32(Date.now() & 0xffffffff);
-    this.progress = parseProgress(readStore<unknown>(STORE_KEY, null));
+    if (this.sky) {
+      const saved = readStore<unknown>(SKY_STORE_KEY, null);
+      // the first flight after the planes left the race: bring the planes and stars won there
+      this.progress = saved ? parseFlight(saved) : fromRace(readStore<unknown>(STORE_KEY, null));
+      // goals may already be met (an old save, or goals changed in an update): those planes are in the hangar
+      const c = claimPlanes(this.progress);
+      this.progress = c.progress;
+      if (!saved || c.planes.length) this.save();
+    } else {
+      this.progress = parseProgress(readStore<unknown>(STORE_KEY, null));
+    }
     this.layer = [];
     this.things = [];
     this.driving = false;
@@ -302,7 +334,12 @@ export class RaceScene extends Phaser.Scene {
     return true;
   }
 
+  /** A Russian line; the flight game has its own words for many race lines (raccoon.sky.* instead of raccoon.race.*). */
   private ru(id: string) {
+    if (this.sky && id.startsWith('raccoon.race.')) {
+      const sky = id.replace('raccoon.race.', 'raccoon.sky.');
+      if (PHRASE_IDS.has(sky)) return phrase(sky as PhraseId);
+    }
     return phrase(id as PhraseId);
   }
 
@@ -360,10 +397,11 @@ export class RaceScene extends Phaser.Scene {
   // ---------- menu: car and track ----------
 
   private save() {
-    writeStore(STORE_KEY, this.progress);
+    writeStore(this.sky ? SKY_STORE_KEY : STORE_KEY, this.progress);
   }
 
   private showMenu() {
+    if (this.sky) return this.showSkyMenu();
     this.clear();
     const bg = this.keep(this.add.graphics());
     bg.fillGradientStyle(0x14213d, 0x14213d, 0x3a0ca3, 0x3a0ca3, 1).fillRect(0, 0, W, H);
@@ -400,18 +438,31 @@ export class RaceScene extends Phaser.Scene {
     this.keep(this.add.text(860, 320, `${this.progress.nitro}`, { fontFamily: FONT, fontSize: '40px', color: '#7dd3fc', fontStyle: 'bold' }).setOrigin(0, 0.5));
     this.keep(
       this.add
-        .text(1000, 320, `Машин: ${this.progress.cars.length} из ${CARS.length}\nСамолётов: ${this.progress.planes.length} из ${PLANES.length}\nБез ошибок: ${this.progress.flawless}`, { fontFamily: FONT, fontSize: '26px', color: '#ffffff', lineSpacing: 6 })
+        .text(1000, 320, `Машин: ${this.progress.cars.length} из ${CARS.length}\nБез ошибок: ${this.progress.flawless}`, { fontFamily: FONT, fontSize: '26px', color: '#ffffff', lineSpacing: 6 })
         .setOrigin(0, 0.5),
     );
     this.keep(
       this.add
-        .text(760, 400, `Без ошибок на трассе «${TRACKS[this.progress.level]!.name}» и труднее — новая машина или самолёт!`, { fontFamily: FONT, fontSize: '22px', color: '#adb5bd', align: 'center', wordWrap: { width: 700 } })
+        .text(760, 400, `Без ошибок на трассе «${CAR_TRACKS[this.progress.level]!.name}» и труднее — новая машина!`, { fontFamily: FONT, fontSize: '22px', color: '#adb5bd', align: 'center', wordWrap: { width: 700 } })
         .setOrigin(0.5),
     );
 
-    TRACKS.forEach((t, i) => {
-      const x = 140 + i * 250;
-      const y = 585;
+    this.trackCards(585);
+
+    if (!readStore<boolean>(HELLO_KEY, false)) {
+      writeStore(HELLO_KEY, true);
+      void this.talk(this.ru('raccoon.race.hello'), this.ru('raccoon.race.rules'));
+    } else {
+      void this.talk(this.ru('raccoon.race.hello'));
+    }
+  }
+
+  /** The row of track (route) cards: stars, lock, "твоя трасса" / "тренировка". */
+  private trackCards(y: number) {
+    const tracks = this.tracks;
+    const own = this.sky ? 'твой маршрут' : 'твоя трасса';
+    tracks.forEach((t, i) => {
+      const x = W / 2 + (i - (tracks.length - 1) / 2) * (this.sky ? 290 : 300);
       const open = unlocked(this.progress, i);
       const pal = PALETTES[t.time];
       const card = this.keep(this.add.container(x, y));
@@ -423,8 +474,14 @@ export class RaceScene extends Phaser.Scene {
         gr.fillStyle(pal.road[0]).fillTriangle(-80, 85, 80, 85, 0, 10);
         gr.fillStyle(0xffffff).fillRect(-3, 28, 6, 12).fillRect(-4, 54, 8, 20);
       } else {
-        gr.fillStyle(t.time === 'day' ? 0x219ebc : 0xffc8dd).fillRect(-115, 10, 230, 75);
-        gr.fillStyle(0xffffff, 0.5).fillRect(-115, 30, 230, 4).fillRect(-115, 56, 230, 4);
+        gr.fillStyle(t.time === 'day' ? 0x219ebc : t.time === 'night' ? 0x13315c : 0xffc8dd).fillRect(-115, 10, 230, 75);
+        gr.fillStyle(0xffffff, t.time === 'night' ? 0.25 : 0.5).fillRect(-115, 30, 230, 4).fillRect(-115, 56, 230, 4);
+        if (t.time === 'night') for (let k = 0; k < 14; k++) gr.fillStyle(0xffffff, 0.8).fillCircle(-105 + ((k * 53) % 210), -70 + ((k * 37) % 70), 1.6);
+        if (t.cones) {
+          // a storm cloud on the card: this route has thunderclouds to fly round
+          gr.fillStyle(0x495057).fillEllipse(70, -6, 56, 26).fillEllipse(86, -14, 36, 26);
+          gr.fillStyle(0xffd60a).fillTriangle(72, 2, 64, 22, 78, 10);
+        }
       }
       gr.lineStyle(6, open ? 0xffd166 : 0x6c757d).strokeRoundedRect(-115, -85, 230, 170, 16);
       card.add(gr);
@@ -442,8 +499,8 @@ export class RaceScene extends Phaser.Scene {
       }
       // the child's own track and the easier ones (practice)
       if (open && i === this.progress.level) {
-        card.add(this.add.rectangle(0, -98, 170, 30, 0xffd166).setStrokeStyle(3, 0x14213d));
-        card.add(this.add.text(0, -98, 'твоя трасса', { fontFamily: FONT, fontSize: '18px', color: '#14213d', fontStyle: 'bold' }).setOrigin(0.5));
+        card.add(this.add.rectangle(0, -98, 180, 30, 0xffd166).setStrokeStyle(3, 0x14213d));
+        card.add(this.add.text(0, -98, own, { fontFamily: FONT, fontSize: '18px', color: '#14213d', fontStyle: 'bold' }).setOrigin(0.5));
       } else if (isPractice(this.progress, i)) {
         card.add(this.add.rectangle(0, -98, 150, 28, 0x6c757d).setStrokeStyle(2, 0xffffff));
         card.add(this.add.text(0, -98, 'тренировка', { fontFamily: FONT, fontSize: '17px', color: '#ffffff' }).setOrigin(0.5));
@@ -461,20 +518,91 @@ export class RaceScene extends Phaser.Scene {
         this.startRace(i);
       });
     });
+  }
 
-    if (!readStore<boolean>(HELLO_KEY, false)) {
-      writeStore(HELLO_KEY, true);
-      void this.talk(this.ru('raccoon.race.hello'), this.ru('raccoon.race.rules'));
-    } else {
-      void this.talk(this.ru('raccoon.race.hello'));
+  /**
+   * The flight game's first screen: the chosen plane on the runway, the hangar,
+   * the next plane to win with how far along its goal is, and the routes.
+   */
+  private showSkyMenu() {
+    this.clear();
+    const bg = this.keep(this.add.graphics());
+    bg.fillGradientStyle(0x48cae4, 0x48cae4, 0xcaf0f8, 0xcaf0f8, 1).fillRect(0, 0, W, 470);
+    // far hills, the airfield grass and the runway with its centre line
+    bg.fillStyle(0x95d5b2).fillEllipse(200, 470, 700, 120).fillEllipse(900, 476, 900, 110);
+    bg.fillStyle(0x52b788).fillRect(0, 440, W, H - 440);
+    bg.fillStyle(0x6c757d).fillRect(0, 372, 700, 64);
+    for (let x = 20; x < 700; x += 70) bg.fillStyle(0xffffff).fillRect(x, 400, 36, 8);
+    bg.fillStyle(0x40916c).fillRect(0, 436, W, 6);
+    for (let i = 0; i < 5; i++) {
+      const cl = this.keep(this.add.image(120 + i * 270, 60 + (i % 2) * 70, 'race-cloud').setScale(0.5 + (i % 3) * 0.2).setAlpha(0.9));
+      this.tweens.add({ targets: cl, x: cl.x - 260, duration: 50000 + i * 7000, repeat: -1, onRepeat: () => (cl.x = W + 150) });
     }
+    this.keep(this.add.text(W / 2, 46, 'Полёт слов', { fontFamily: FONT, fontSize: '58px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 10 }).setOrigin(0.5));
+    this.keep(button(this, 1170, 46, 'Домой', () => this.scene.start('Menu'), { w: 170, h: 64, color: 0x6c757d }));
+    this.raccoon = this.keep(this.add.image(80, 70, 'char-raccoon').setDisplaySize(130, 130));
+    this.subtitle = this.keep(
+      this.add
+        .text(W / 2, 690, '', { fontFamily: FONT, fontSize: '26px', color: '#ffffff', backgroundColor: '#14213dcc', padding: { x: 14, y: 8 }, align: 'center', wordWrap: { width: 1100 } })
+        .setOrigin(0.5)
+        .setDepth(50)
+        .setVisible(false),
+    );
+
+    // the chosen plane on the runway; tap to hear its name
+    const pl = planeById(this.progress.plane);
+    const img = this.keep(this.add.image(330, 380, `race-plane-${pl.id}`).setOrigin(0.5, 0.9).setScale(0.72));
+    this.tweens.add({ targets: img, y: 370, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
+    img.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+      this.beep([660, 880], 0.08);
+      void this.talk(english(planeLine(pl.id)));
+    });
+    this.keep(this.add.text(330, 160, pl.name, { fontFamily: FONT, fontSize: '34px', color: '#ffffff', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 7 }).setOrigin(0.5));
+
+    const g = this.keep(button(this, 800, 170, '         Ангар', () => this.openGarage(), { w: 340, h: 100, color: 0x277da1 }));
+    g.add(this.add.image(-106, -4, 'race-hangar').setDisplaySize(90, 74));
+    this.keep(this.add.image(700, 262, 'race-coin').setDisplaySize(50, 50));
+    this.keep(this.add.text(736, 262, String(this.progress.coins), { fontFamily: FONT, fontSize: '36px', color: '#14213d', fontStyle: 'bold' }).setOrigin(0, 0.5));
+    this.keep(this.add.image(850, 262, 'race-nitro').setDisplaySize(36, 50));
+    this.keep(this.add.text(878, 262, String(this.progress.nitro), { fontFamily: FONT, fontSize: '36px', color: '#1d3f8f', fontStyle: 'bold' }).setOrigin(0, 0.5));
+    this.keep(this.add.text(990, 262, `Самолётов: ${this.progress.planes.length} из ${PLANES.length}`, { fontFamily: FONT, fontSize: '26px', color: '#14213d', fontStyle: 'bold' }).setOrigin(0, 0.5));
+
+    // the next plane and its goal, with a progress bar
+    const next = nextPlane(this.progress);
+    if (next) this.goalCard(next, 860, 360);
+    else this.keep(this.add.text(860, 360, 'Все самолёты в ангаре!', { fontFamily: FONT, fontSize: '32px', color: '#14213d', fontStyle: 'bold' }).setOrigin(0.5));
+
+    this.trackCards(585);
+
+    if (!readStore<boolean>(SKY_HELLO_KEY, false)) {
+      writeStore(SKY_HELLO_KEY, true);
+      void this.talk(this.ru('raccoon.sky.hello'), this.ru('raccoon.sky.rules'));
+    } else {
+      void this.talk(this.ru('raccoon.sky.hello'));
+    }
+  }
+
+  /** "Следующий самолёт": its dark silhouette, the goal and a bar of how far along it is. */
+  private goalCard(pl: Plane, x: number, y: number) {
+    const { have, need } = goalProgress(pl.goal, this.progress);
+    const box = this.keep(this.add.container(x, y));
+    box.add(this.add.rectangle(0, 0, 600, 120, 0x14213d, 0.82).setStrokeStyle(4, 0xffd166));
+    box.add(this.add.image(-220, 4, `race-plane-${pl.id}`).setScale(0.32).setTintFill(0x0b132b).setAlpha(0.85));
+    box.add(this.add.text(-220, 4, '?', { fontFamily: FONT, fontSize: '44px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0.5));
+    box.add(this.add.text(-120, -36, 'Следующий самолёт:', { fontFamily: FONT, fontSize: '22px', color: '#adb5bd' }).setOrigin(0, 0.5));
+    box.add(this.add.text(-120, -4, goalText(pl.goal), { fontFamily: FONT, fontSize: '28px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0.5));
+    const bw = 300;
+    box.add(this.add.rectangle(-120, 36, bw, 22, 0xffffff, 0.2).setOrigin(0, 0.5).setStrokeStyle(2, 0xffffff));
+    box.add(this.add.rectangle(-120, 36, Math.max(4, (bw * have) / need), 22, 0x52d273).setOrigin(0, 0.5));
+    if (need > 1) box.add(this.add.text(-120 + bw + 14, 36, `${have} из ${need}`, { fontFamily: FONT, fontSize: '22px', color: '#ffd166', fontStyle: 'bold' }).setOrigin(0, 0.5));
+    box.setSize(600, 120).setInteractive({ useHandCursor: true }).on('pointerup', () => void this.talk(this.ru(`raccoon.sky.goal.${pl.goal.kind}`)));
   }
 
   private openGarage() {
     this.clear();
     this.run++;
     const run = this.run;
-    void runGarage(this.garageHost(), run).then(() => {
+    void runGarage(this.garageHost(), run, this.sky).then(() => {
       if (run === this.run && this.sys.isActive()) this.showMenu();
     });
   }
@@ -530,11 +658,11 @@ export class RaceScene extends Phaser.Scene {
     this.clear();
     this.run++;
     this.trackIdx = idx;
-    this.track = TRACKS[idx]!;
+    this.track = this.tracks[idx]!;
     this.pal = PALETTES[this.track.time];
     this.rows = planRace(this.track, this.rng, this.progress.misses, this.progress.seen);
     this.plane = this.track.vehicle === 'plane';
-    this.tele = startRun('race', { track: idx, car: this.progress.car, lanes: this.track.lanes, rows: this.rows.length, vehicle: this.track.vehicle });
+    this.tele = startRun(this.gameId, { track: idx, car: this.sky ? this.progress.plane : this.progress.car, lanes: this.track.lanes, rows: this.rows.length, vehicle: this.track.vehicle });
     this.pos = 0;
     this.speed = 0;
     this.lane = Math.floor((this.track.lanes - 1) / 2);
@@ -582,7 +710,7 @@ export class RaceScene extends Phaser.Scene {
 
     // the car
     this.car = this.plane
-      ? this.keep(this.add.image(W / 2, CAR_Y, `race-plane-${this.progress.plane}`).setOrigin(0.5, 0.9).setDisplaySize(PLANE_PX, (PLANE_PX * PLANE_H) / PLANE_W).setDepth(2000))
+      ? this.keep(this.add.image(W / 2, CAR_Y, this.vehicleKey).setOrigin(0.5, 0.9).setDisplaySize(PLANE_PX, (PLANE_PX * PLANE_H) / PLANE_W).setDepth(2000))
       : this.keep(this.add.image(W / 2, CAR_Y, `race-car-${this.progress.car}`).setOrigin(0.5, 1).setDisplaySize(CAR_PX, (CAR_PX * CAR_H) / CAR_W).setDepth(2000));
     this.brakeGlow = this.keep(this.add.ellipse(W / 2, CAR_Y - 90, 320, 60, 0xff3030, 0).setDepth(2001));
 
@@ -850,6 +978,8 @@ export class RaceScene extends Phaser.Scene {
   private addThing(o: { s: number; x: number; y?: number; w: number; kind: Thing['kind']; key?: string; obj?: Phaser.GameObjects.Container; baseW?: number; lane?: number; h?: number; word?: string }) {
     const obj = o.obj ?? this.add.image(0, 0, o.key!).setOrigin(0.5, 1);
     obj.setVisible(false);
+    // a night flight: islands, ships and clouds in moonlight
+    if (this.plane && this.track.time === 'night' && o.kind === 'scenery' && obj instanceof Phaser.GameObjects.Image) obj.setTint(0x7d8fc4);
     const baseW = o.baseW ?? (obj as Phaser.GameObjects.Image).width;
     const t: Thing = { s: o.s, x: o.x, y: o.y, w: o.w, obj, baseW, kind: o.kind, lane: o.lane, h: o.h, word: o.word };
     this.things.push(t);
@@ -865,7 +995,7 @@ export class RaceScene extends Phaser.Scene {
       while (this.nextHouse < far) {
         for (const side of [-1, 1]) {
           const x = side * (3 + this.rng() * 9);
-          if (day) {
+          if (day || this.track.time === 'night') {
             const ship = this.rng() < 0.35;
             this.addThing({ s: this.nextHouse + this.rng() * 3, x, y: SEA_Y, w: ship ? 2.2 : 4, kind: 'scenery', key: ship ? 'race-ship' : 'race-island' });
           } else {
@@ -995,11 +1125,11 @@ export class RaceScene extends Phaser.Scene {
         this.correct++;
         this.hits.push(row.target);
         this.stepLine(this.linePos + 1);
-        recordWord(row.target, true, 'race');
+        recordWord(row.target, true, this.gameId);
         if (!(await this.talk(english(row.target), english(pick(this.rng, PRAISE_LINES))))) return;
       } else {
         this.missed.push(row.target);
-        recordWord(row.target, false, 'race');
+        recordWord(row.target, false, this.gameId);
         if (!(await this.review(row.target, res.word, run))) return;
       }
       if (this.coneHit && !this.coneTold) {
@@ -1018,7 +1148,7 @@ export class RaceScene extends Phaser.Scene {
     this.addThing({ s: this.pos + 30, x: 0, y: this.plane ? -0.4 : 0, w: this.roadHalf * 2 + 0.6, kind: 'arch', key: 'race-arch' });
     while (ok() && this.things.some((t) => t.kind === 'arch' && t.s - this.pos > Z_HIT)) await this.wait(100, run);
     if (!ok()) return;
-    voice.say(english('race.finish'));
+    voice.say(english(this.sky ? 'sky.land' : 'race.finish'));
     this.beep([523, 659, 784, 1046], 0.14);
     this.driving = false;
     this.showResults();
@@ -1236,7 +1366,9 @@ export class RaceScene extends Phaser.Scene {
   /** Under the plane: the sea with wave stripes (or a floor of pink clouds) running towards us. */
   private drawSea(g: Phaser.GameObjects.Graphics) {
     const day = this.track.time === 'day';
-    const cols = day ? [0x1d8fb4, 0x2aa3c7] : [0xffd6e4, 0xffe8ef];
+    const night = this.track.time === 'night';
+    // day: blue sea; sunset: a floor of pink clouds; night: a dark sea under the moon
+    const cols = day ? [0x1d8fb4, 0x2aa3c7] : night ? [0x0b2545, 0x13315c] : [0xffd6e4, 0xffe8ef];
     const fogc = day ? 0xbde0fe : this.pal.fog;
     g.fillStyle(mix(cols[0]!, fogc, 0.7)).fillRect(0, HOR, W, H - HOR);
     const n0 = Math.floor((this.pos + ZNEAR) / SEG);
@@ -1415,7 +1547,7 @@ export class RaceScene extends Phaser.Scene {
       run,
       plane: this.plane,
       track: this.trackIdx,
-      carKey: this.plane ? `race-plane-${this.progress.plane}` : `race-car-${this.progress.car}`,
+      carKey: this.vehicleKey,
     });
     this.raccoon = raccoon;
     this.subtitle = subtitle;
@@ -1431,40 +1563,65 @@ export class RaceScene extends Phaser.Scene {
   // ---------- results ----------
 
   private showResults() {
-    const before = TRACKS.map((_, i) => unlocked(this.progress, i));
+    const tracks = this.tracks;
+    const before = tracks.map((_, i) => unlocked(this.progress, i));
     const outcome = { correct: this.correct, hits: this.hits, missed: this.missed, asked: this.asked, bumps: this.bumps, rows: this.rows.length, boostMisses: this.boostTotal - this.boostRight };
     const was = this.progress.level;
-    const { progress, prize, coins, practice } = recordRace(this.progress, this.trackIdx, outcome);
-    const newCar = prize?.item;
-    const air = prize?.kind === 'plane';
-    this.progress = progress;
+    let newCar: (typeof CARS)[number] | undefined;
+    let newPlanes: Plane[] = [];
+    let coins: number;
+    let practice: boolean;
+    if (this.sky) {
+      const r = recordFlight(this.progress, this.trackIdx, outcome);
+      this.progress = r.progress;
+      newPlanes = r.planes;
+      coins = r.coins;
+      practice = r.practice;
+    } else {
+      const r = recordRace(this.progress, this.trackIdx, outcome);
+      this.progress = r.progress;
+      newCar = r.prize?.item;
+      coins = r.coins;
+      practice = r.practice;
+    }
     // the smart level: only a race on the child's own track or a harder one moves it
     let level: ReturnType<typeof nextLevelSmart> | undefined;
     if (!practice) {
       const st = levelStats(outcome, this.boostRight, this.boostTotal);
-      level = nextLevelSmart('race', this.trackIdx + 1, statsFromRun(this.tele, st.right, st.total), LEVEL_RULES);
+      level = nextLevelSmart(this.gameId, this.trackIdx + 1, statsFromRun(this.tele, st.right, st.total), levelRules(tracks));
       // a harder track only lifts the level; a hard race there doesn't push it below the own track
-      if (this.trackIdx === was || level.change > 0) this.progress = withLevel(this.progress, level.level);
+      if (this.trackIdx === was || level.change > 0) this.progress = withLevel(this.progress, level.level, tracks);
+    }
+    if (this.sky) {
+      // a route opened by the level may bring one more plane
+      const c = claimPlanes(this.progress);
+      this.progress = c.progress;
+      newPlanes = [...newPlanes, ...c.planes];
     }
     const levelUp = this.progress.level > was;
     const levelDown = this.progress.level < was;
     this.save();
-    const opened = TRACKS.some((_, i) => !before[i] && unlocked(this.progress, i));
+    const opened = tracks.some((_, i) => !before[i] && unlocked(this.progress, i));
     const stars = starsFor(this.correct);
     const flawless = isFlawless(outcome);
-    this.tele?.end({ completed: true, stars, score: this.correct, crashes: this.crashes, bumps: this.bumps, unlocked: opened, coins, flawless, prize: newCar?.id, practice, level: this.progress.level, ...(level ? levelLog(level) : {}) });
+    const prizeId = this.sky ? newPlanes.map((p) => p.id).join(',') || undefined : newCar?.id;
+    this.tele?.end({ completed: true, stars, score: this.correct, crashes: this.crashes, bumps: this.bumps, unlocked: opened, coins, flawless, prize: prizeId, practice, level: this.progress.level, ...(level ? levelLog(level) : {}) });
+    const prize: { id: string; name: string; key: string; line: string } | undefined = this.sky
+      ? newPlanes[0] && { id: newPlanes[0].id, name: newPlanes[0].name, key: `race-plane-${newPlanes[0].id}`, line: planeLine(newPlanes[0].id) }
+      : newCar && { id: newCar.id, name: newCar.name, key: `race-car-${newCar.id}`, line: carLine(newCar.id) };
+    const place = this.sky ? 'маршрут' : 'трасса';
     const d = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
       (this.keep(o) as unknown as Phaser.GameObjects.Components.Depth).setDepth(3300);
       return o;
     };
     d(this.add.rectangle(W / 2, H / 2, W, H, 0x14213d, 0.85).setInteractive());
-    d(this.add.text(W / 2, 70, 'Финиш!', { fontFamily: FONT, fontSize: '76px', color: '#ffd166', fontStyle: 'bold', stroke: '#e63946', strokeThickness: 10 }).setOrigin(0.5));
-    const sx = newCar ? 330 : W / 2;
+    d(this.add.text(W / 2, 70, this.sky ? 'Посадка!' : 'Финиш!', { fontFamily: FONT, fontSize: '76px', color: '#ffd166', fontStyle: 'bold', stroke: '#e63946', strokeThickness: 10 }).setOrigin(0.5));
+    const sx = prize ? 330 : W / 2;
     for (let k = 0; k < 3; k++) {
       const st = d(this.add.image(sx - 150 + k * 150, 200, k < stars ? 'race-star' : 'race-star-off').setDisplaySize(130, 130).setScale(0));
       this.tweens.add({ targets: st, scale: 130 / 120, delay: 300 + k * 350, duration: 400, ease: 'Back.easeOut', onStart: () => k < stars && this.beep([660 + k * 220], 0.12) });
     }
-    d(this.add.text(sx, 310, `${this.childName}, правильных слов: ${this.correct} из ${this.rows.length}`, { fontFamily: FONT, fontSize: newCar ? '32px' : '40px', color: '#ffffff' }).setOrigin(0.5));
+    d(this.add.text(sx, 310, `${this.childName}, правильных слов: ${this.correct} из ${this.rows.length}`, { fontFamily: FONT, fontSize: prize ? '32px' : '40px', color: '#ffffff' }).setOrigin(0.5));
     d(this.add.text(sx, 356, 'Три звезды — 10 слов, две — 7, одна — 5', { fontFamily: FONT, fontSize: '22px', color: '#adb5bd' }).setOrigin(0.5));
     // coins earned
     d(this.add.image(sx - 90, 412, 'race-coin').setDisplaySize(50, 50));
@@ -1484,39 +1641,40 @@ export class RaceScene extends Phaser.Scene {
       y += 44;
     }
     if (practice) {
-      d(this.add.text(sx, y, `Тренировка: монеты пополам.${flawless ? '\nНовые машины ждут на трассе «' + TRACKS[this.progress.level]!.name + '»!' : ''}`, { fontFamily: FONT, fontSize: '24px', color: '#adb5bd', align: 'center' }).setOrigin(0.5, 0));
-      y += flawless ? 70 : 40;
+      const hint = this.sky ? '' : flawless ? '\nНовые машины ждут на трассе «' + tracks[this.progress.level]!.name + '»!' : '';
+      d(this.add.text(sx, y, `Тренировка: монеты пополам.${hint}`, { fontFamily: FONT, fontSize: '24px', color: '#adb5bd', align: 'center' }).setOrigin(0.5, 0));
+      y += hint ? 70 : 40;
     }
     if (levelUp) {
-      d(this.add.text(sx, y, `Твоя трасса теперь «${TRACKS[this.progress.level]!.name}»!`, { fontFamily: FONT, fontSize: '28px', color: '#ffd166' }).setOrigin(0.5));
+      d(this.add.text(sx, y, `${this.sky ? 'Твой маршрут' : 'Твоя трасса'} теперь «${tracks[this.progress.level]!.name}»!`, { fontFamily: FONT, fontSize: '28px', color: '#ffd166' }).setOrigin(0.5));
       y += 40;
     } else if (levelDown) {
-      d(this.add.text(sx, y, `Потренируемся на трассе «${TRACKS[this.progress.level]!.name}»`, { fontFamily: FONT, fontSize: '26px', color: '#ffffff' }).setOrigin(0.5));
+      d(this.add.text(sx, y, `Потренируемся: ${place} «${tracks[this.progress.level]!.name}»`, { fontFamily: FONT, fontSize: '26px', color: '#ffffff' }).setOrigin(0.5));
       y += 40;
     }
-    if (opened && !levelUp) d(this.add.text(sx, y, 'Открыта новая трасса!', { fontFamily: FONT, fontSize: '30px', color: '#ffd166' }).setOrigin(0.5));
-    if (newCar) {
-      // the new car drives onto a podium
-      d(this.add.text(950, 160, air ? 'Новый самолёт!' : 'Новая машина!', { fontFamily: FONT, fontSize: '44px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 8 }).setOrigin(0.5));
+    if (opened && !levelUp) d(this.add.text(sx, y, this.sky ? 'Открыт новый маршрут!' : 'Открыта новая трасса!', { fontFamily: FONT, fontSize: '30px', color: '#ffd166' }).setOrigin(0.5));
+    if (prize) {
+      // the new car drives (the new plane taxis) onto a podium
+      d(this.add.text(950, 160, this.sky ? 'Новый самолёт!' : 'Новая машина!', { fontFamily: FONT, fontSize: '44px', color: '#ffd166', fontStyle: 'bold', stroke: '#14213d', strokeThickness: 8 }).setOrigin(0.5));
       d(this.add.ellipse(950, 400, 380, 70, 0xffd166, 0.9).setStrokeStyle(5, 0xffffff));
-      const img = d(this.add.image(W + 300, 400, `${air ? 'race-plane' : 'race-car'}-${newCar.id}`).setOrigin(0.5, 0.92).setScale(0.8));
+      const img = d(this.add.image(W + 300, 400, prize.key).setOrigin(0.5, 0.92).setScale(this.sky ? 0.7 : 0.8));
       this.tweens.add({ targets: img, x: 950, duration: 1100, delay: 600, ease: 'Back.easeOut' });
-      d(this.add.text(950, 462, newCar.name, { fontFamily: FONT, fontSize: '36px', color: '#ffffff', stroke: '#14213d', strokeThickness: 6 }).setOrigin(0.5));
-      d(button(this, 950, 530, 'Взять в гонку', () => {
-        this.progress = air ? { ...this.progress, plane: newCar.id } : { ...this.progress, car: newCar.id };
+      d(this.add.text(950, 462, newPlanes.length > 1 ? `${prize.name} и ещё ${newPlanes.length - 1}` : prize.name, { fontFamily: FONT, fontSize: '36px', color: '#ffffff', stroke: '#14213d', strokeThickness: 6 }).setOrigin(0.5));
+      d(button(this, 950, 530, this.sky ? 'Взять в полёт' : 'Взять в гонку', () => {
+        this.progress = this.sky ? { ...this.progress, plane: prize.id } : { ...this.progress, car: prize.id };
         this.save();
         this.beep([660, 880], 0.08);
-        void this.talk(english(air ? planeLine(newCar.id) : carLine(newCar.id)));
+        void this.talk(english(prize.line));
       }, { w: 300, h: 70, color: 0x38b000 }));
     }
     d(button(this, W / 2 - 330, 640, 'Ещё раз', () => this.startRace(this.trackIdx), { w: 280, h: 96, color: 0xe63946 }));
-    d(button(this, W / 2, 640, 'Трассы', () => this.showMenu(), { w: 280, h: 96, color: 0x277da1 }));
+    d(button(this, W / 2, 640, this.sky ? 'Маршруты' : 'Трассы', () => this.showMenu(), { w: 280, h: 96, color: 0x277da1 }));
     d(button(this, W / 2 + 330, 640, 'Домой', () => this.scene.start('Menu'), { w: 280, h: 96, color: 0x6c757d }));
     const lines: Utterance[] = [this.ru(`raccoon.race.finish.${stars}`)];
-    if (newCar) lines.push(this.ru(air ? 'raccoon.race.newplane' : 'raccoon.race.newcar'), english(air ? planeLine(newCar.id) : carLine(newCar.id)));
-    if (practice && flawless) lines.push(this.ru('raccoon.race.practice.car'));
-    if (levelUp) lines.push(this.ru(TRACKS[this.progress.level]!.vehicle === 'plane' && TRACKS[was]!.vehicle === 'car' ? 'raccoon.race.unlock.plane' : 'raccoon.race.levelup'));
-    else if (opened) lines.push(this.ru(this.trackIdx === 2 ? 'raccoon.race.unlock.plane' : 'raccoon.race.unlock'));
+    if (prize) lines.push(this.ru(this.sky ? 'raccoon.sky.newplane' : 'raccoon.race.newcar'), english(prize.line));
+    if (practice && flawless && !this.sky) lines.push(this.ru('raccoon.race.practice.car'));
+    if (levelUp) lines.push(this.ru('raccoon.race.levelup'));
+    else if (opened) lines.push(this.ru('raccoon.race.unlock'));
     void this.wait(1400).then((alive) => alive && this.talk(...lines));
   }
 }

@@ -88,7 +88,7 @@ track('menu', 'menu.pick', { game: 'snake' });      // разовое событ
 
 ## Выгрузка
 
-- JSON (`format: "yunga-analytics"`): `events`, `voyage` (профиль и попытки плавания из `Storage.exportJson`), `local` (прогресс мини-игр из localStorage: `snake-words`, `english-words`, `word-log`, `parcel-progress`, `race-progress`).
+- JSON (`format: "yunga-analytics"`): `events`, `voyage` (профиль и попытки плавания из `Storage.exportJson`), `local` (прогресс мини-игр из localStorage: `snake-words`, `english-words`, `word-log`, `parcel-progress`, `race-progress`, `flight-progress`).
 - CSV: одна строка на событие, частые поля в своих колонках, остальное JSON в колонке `data`. Открывается в Excel и Google Sheets (UTF-8 с BOM).
 - Отчёт: та же сводка, что в панели, в Markdown.
 - «Загрузить JSON с другого устройства» добавляет события из файла в журнал (повторы пропускаются).

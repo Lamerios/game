@@ -116,7 +116,7 @@ export function unlocks(a: Achievements, ever: readonly WeaponId[] = []): Unlock
     { id: 'water', rule: 'Есть сразу', open: true, have: 1, need: 1 },
     { id: 'bubble', rule: '★★★ в трёх разных играх', open: false, have: Math.min(3, a.starGames.length), need: 3 },
     { id: 'twins', rule: 'Пройди до конца 5 разных игр', open: false, have: Math.min(5, a.finished.length), need: 5 },
-    { id: 'cannon', rule: '★★★ в «Гонке слов»', open: false, have: has('race', a.starGames), need: 1 },
+    { id: 'cannon', rule: '★★★ в «Гонке слов» или «Полёте слов»', open: false, have: Math.min(1, has('race', a.starGames) + has('flight', a.starGames)), need: 1 },
     { id: 'blaster', rule: 'Пройди до конца «Змейку» и «Посылку»', open: false, have: has('snake', a.finished) + has('parcel', a.finished), need: 2 },
     { id: 'confetti', rule: `${CONFETTI_ANSWERS} верных ответов в других играх`, open: false, have: Math.min(CONFETTI_ANSWERS, a.correct), need: CONFETTI_ANSWERS },
     { id: 'mortar', rule: '★★★ в «Верфи» или «Порванной карте»', open: false, have: Math.min(1, has('shipyard', a.starGames) + has('mappuzzle', a.starGames)), need: 1 },

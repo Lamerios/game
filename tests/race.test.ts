@@ -6,9 +6,10 @@ import { mulberry32 } from '../src/games/common/rng';
 import { PICTURES } from '../src/games/snake/logic';
 import {
   BOOST_AFTER, boosterTask, boostSteps, CARS, englishLines, freshProgress, isFlawless, landingOptions, LINE_MAX, makeMaze, mazeDistances, mazeSize,
-  isPractice, LEVEL_RULES, nextPlane, PLANES, STARTER_PLANES, levelStats, nextCar, nitroPrice, practiceCoins, withLevel, numberWords, parseProgress, planRace, poolOf, PRAISE_LINES, recordRace, ROWS_PER_RACE, starsFor, STARTER_CARS, TRACKS, unlocked,
+  isPractice, LEVEL_RULES, levelStats, nextCar, nitroPrice, practiceCoins, withLevel, numberWords, parseProgress, planRace, poolOf, PRAISE_LINES, recordRace, ROWS_PER_RACE, starsFor, STARTER_CARS, TRACKS, unlocked,
   type RaceOutcome,
 } from '../src/games/race/logic';
+import { SKY_TRACKS } from '../src/games/flight/logic';
 
 const outcome = (o: Partial<RaceOutcome>): RaceOutcome => ({ correct: 0, hits: [], missed: [], asked: [], bumps: 0, rows: ROWS_PER_RACE, ...o });
 
@@ -49,7 +50,7 @@ describe('race', () => {
 
   it('plans rows: the target once, no two cards on a spot, cones never block every way', () => {
     const rng = mulberry32(3);
-    TRACKS.forEach((t) => {
+    [...TRACKS, ...SKY_TRACKS].forEach((t) => {
       for (let k = 0; k < 30; k++) {
         const rows = planRace(t, rng, { apple: 3 }, {});
         expect(rows).toHaveLength(ROWS_PER_RACE);
@@ -142,14 +143,12 @@ describe('race', () => {
     expect(r.practice).toBe(false);
     expect(r.prize?.kind).toBe('car');
     expect(r.coins).toBe(ROWS_PER_RACE + 5);
-    r = recordRace(p, 3, clean);
-    expect(r.prize?.kind).toBe('plane');
     // the level opens tracks and survives a save
+    expect(unlocked({ ...p, level: 1 }, 2)).toBe(false);
     expect(unlocked(p, 2)).toBe(true);
-    expect(unlocked(p, 3)).toBe(false);
     p = withLevel(p, 5);
-    expect(p.level).toBe(4);
-    expect(parseProgress(JSON.parse(JSON.stringify(p))).level).toBe(4);
+    expect(p.level).toBe(2);
+    expect(parseProgress(JSON.parse(JSON.stringify(p))).level).toBe(2);
     expect(withLevel(p, 0).level).toBe(0);
   });
 
@@ -166,30 +165,6 @@ describe('race', () => {
     expect(LEVEL_RULES.maxLevel).toBe(TRACKS.length);
   });
 
-  it('gives a new plane for a flight without mistakes, on the own track or harder', () => {
-    const plane = TRACKS.findIndex((t) => t.vehicle === 'plane');
-    const clean = outcome({ correct: ROWS_PER_RACE });
-    let p = { ...freshProgress(), level: plane };
-    expect(p.planes).toEqual([...STARTER_PLANES]);
-    const got: string[] = [];
-    for (let i = 0; i < PLANES.length + 1; i++) {
-      const r = recordRace(p, plane, clean);
-      if (r.prize) {
-        expect(r.prize.kind).toBe('plane');
-        got.push(r.prize.item.id);
-      }
-      p = r.progress;
-    }
-    expect(got).toEqual(PLANES.slice(STARTER_PLANES.length).map((c) => c.id));
-    expect(p.cars).toEqual([...STARTER_CARS]);
-    expect(nextPlane(p)).toBeUndefined();
-    expect(parseProgress(JSON.parse(JSON.stringify({ ...p, plane: 'p-gold' }))).plane).toBe('p-gold');
-    // a plane track below the level is practice
-    expect(recordRace({ ...freshProgress(), level: TRACKS.length - 1 }, plane, clean).prize).toBeUndefined();
-    // old saves get the starter plane
-    expect(parseProgress({ car: 'blue' })).toMatchObject({ plane: 'p-red', planes: ['p-red'] });
-  });
-
   it('a wrong booster answer breaks a race without mistakes', () => {
     const clean = outcome({ correct: ROWS_PER_RACE });
     expect(isFlawless({ ...clean, boostMisses: 1 })).toBe(false);
@@ -197,11 +172,12 @@ describe('race', () => {
     expect(recordRace(freshProgress(), 0, { ...clean, boostMisses: 0 }).prize?.kind).toBe('car');
   });
 
-  it('opens the plane after the car tracks', () => {
-    const plane = TRACKS.findIndex((t) => t.vehicle === 'plane');
-    expect(plane).toBeGreaterThan(0);
-    expect(TRACKS.slice(0, plane).every((t) => t.vehicle === 'car')).toBe(true);
-    for (const t of TRACKS.filter((x) => x.vehicle === 'plane')) expect(t.heights).toBe(2);
+  it('has only car tracks: the planes have their own game', () => {
+    expect(TRACKS.every((t) => t.vehicle === 'car')).toBe(true);
+    // an old save from when the race had plane tracks lands on the last car track
+    expect(parseProgress({ level: 4, stars: [3, 3, 3, 2, 1] })).toMatchObject({ level: 2, stars: [3, 3, 3] });
+    // and keeps its planes, so the flight game can take them over
+    expect(parseProgress({ planes: ['p-red', 'p-blue'], plane: 'p-blue' })).toMatchObject({ plane: 'p-blue', planes: ['p-red', 'p-blue'] });
   });
 
   it('prices nitro at 3 to 9 coins', () => {
@@ -225,8 +201,10 @@ describe('race number line', () => {
 
   it('boosters get harder from track to track and always land on the line', () => {
     const rng = mulberry32(11);
-    const kinds = TRACKS.map(() => new Set<string>());
-    TRACKS.forEach((t, i) => {
+    // by booster difficulty 0–3, over the race's and the flight game's tracks
+    const kinds = [0, 1, 2, 3].map(() => new Set<string>());
+    [...TRACKS, ...SKY_TRACKS].forEach((t) => {
+      const i = t.boost;
       for (let k = 0; k < 200; k++) {
         const pos = Math.floor(rng() * 12);
         for (const after of BOOST_AFTER) {
@@ -243,7 +221,7 @@ describe('race number line', () => {
     expect([...kinds[0]!]).toEqual(['compare']);
     expect(kinds[1]!.has('sum')).toBe(true);
     expect(kinds[2]!.has('minus')).toBe(true);
-    expect(kinds[4]!.has('pairs')).toBe(true);
+    expect(kinds[3]!.has('pairs')).toBe(true);
   });
 });
 

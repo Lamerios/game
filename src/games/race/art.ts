@@ -276,32 +276,6 @@ export const STAR = s(120, 120, `<path d="M60 8 L75 42 L112 46 L84 70 L92 108 L6
 export const STAR_OFF = s(120, 120, `<path d="M60 8 L75 42 L112 46 L84 70 L92 108 L60 88 L28 108 L36 70 L8 46 L45 42Z" fill="#adb5bd" opacity=".6" ${S}/>`);
 
 
-// ---------- the plane, seen from behind ----------
-
-export const PLANE_W = 420;
-export const PLANE_H = 260;
-
-/** A small propeller plane from behind in the car's colours: wings, tail fin, the spinning propeller around the nose. */
-export function planeSvg(c: Car): string {
-  const b = c.body;
-  const d = c.dark;
-  return s(PLANE_W, PLANE_H, `
-    <ellipse cx="210" cy="150" rx="74" ry="74" fill="#ffffff" opacity=".28"/>
-    <ellipse cx="210" cy="150" rx="74" ry="74" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="4" stroke-dasharray="14 10"/>
-    <path d="M14 150 C14 136 24 130 40 130 L380 130 C396 130 406 136 406 150 C406 162 396 166 380 166 L40 166 C24 166 14 162 14 150Z" fill="${b}" ${S}/>
-    <path d="M30 140 H180" stroke="#fff" stroke-opacity=".5" stroke-width="7" stroke-linecap="round"/>
-    <circle cx="44" cy="150" r="7" fill="#e63946"/><circle cx="376" cy="150" r="7" fill="#38b000"/>
-    <circle cx="210" cy="150" r="46" fill="${b}" ${S}/>
-    <circle cx="210" cy="150" r="22" fill="${d}" ${S}/>
-    <path d="M190 128 C198 118 214 116 226 122" stroke="#fff" stroke-opacity=".5" stroke-width="7" stroke-linecap="round" fill="none"/>
-    <path d="M130 120 H290 L276 104 H144Z" fill="${d}" ${S}/>
-    <path d="M200 112 L210 20 L222 20 L222 112Z" fill="${b}" ${S}/>
-    <path d="M204 108 L212 36" stroke="#fff" stroke-opacity=".5" stroke-width="5" stroke-linecap="round"/>
-    <text x="214" y="86" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="26" text-anchor="middle" fill="#fff" stroke="${OL}" stroke-width="2">${c.number}</text>
-    <path d="M196 196 L190 236 M224 196 L230 236" stroke="${OL}" stroke-width="8"/>
-    <ellipse cx="188" cy="238" rx="12" ry="10" fill="#1f1f24" ${S}/><ellipse cx="232" cy="238" rx="12" ry="10" fill="#1f1f24" ${S}/>`);
-}
-
 /** A colour card: a round paint blob, so it reads as "this colour", not as a thing. */
 export function colorBlobSvg(paint: string): string {
   return s(160, 160, `<path d="M80 14 C118 14 146 40 146 78 C146 104 134 112 132 128 C130 146 116 150 112 134 C108 120 98 140 84 146 C66 152 70 132 56 136 C36 142 14 118 14 82 C14 42 42 14 80 14Z"
