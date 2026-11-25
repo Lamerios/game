@@ -39,6 +39,11 @@ export class AnchorScene extends Phaser.Scene {
   private ship!: Phaser.GameObjects.Image;
   private marks: Phaser.GameObjects.GameObject[] = [];
   private accepting = false;
+
+  /** Gamepad / TV remote: a free pointer along the line while a drop is awaited. */
+  get padMode() {
+    return this.accepting ? 'cursor' : 'focus';
+  }
   private askedAt = 0;
   private talkToken = 0;
 

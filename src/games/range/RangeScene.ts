@@ -62,6 +62,11 @@ export class RangeScene extends Phaser.Scene {
   /** The task on screen (read by the play-through check in dev). */
   private task?: Task;
 
+  /** Gamepad / TV remote: a free crosshair during a round, the focus ring on menus. */
+  get padMode() {
+    return this.task ? 'cursor' : 'focus';
+  }
+
   constructor() {
     super('Range');
   }
