@@ -1,5 +1,5 @@
 import content from '../../../content/phrases.json';
-import { unstress } from '../../core/phrases';
+import { byLevel, COLORS, NUMBERS, numberId, numberOf, PICTURES, WORDS, wordById, type Word } from '../../core/dictionary';
 import { LEARNT_AT } from '../../core/wordStats';
 import { shuffle, type Rng } from '../common/rng';
 
@@ -18,229 +18,12 @@ export interface Cell {
 export const DIRS: Record<Dir, Cell> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
 export const OPPOSITE: Record<Dir, Dir> = { up: 'down', down: 'up', left: 'right', right: 'left' };
 
-export type Category =
-  | 'fruit' | 'vegetable' | 'animal' | 'thing' | 'food' | 'transport' | 'home' | 'clothes' | 'toy' | 'nature' | 'body'
-  | 'color' | 'number';
-export interface Word {
-  /** Also the picture (public/snake/<id>.webp; numbers are drawn) and the clip (en.<id>). Numbers are n0…n100. */
-  id: string;
-  ru: string;
-  cat: Category;
-}
-
-export const PICTURES: readonly Word[] = [
-  { id: 'apple', ru: 'яблоко', cat: 'fruit' },
-  { id: 'banana', ru: 'банан', cat: 'fruit' },
-  { id: 'orange', ru: 'апельсин', cat: 'fruit' },
-  { id: 'pear', ru: 'груша', cat: 'fruit' },
-  { id: 'grapes', ru: 'виноград', cat: 'fruit' },
-  { id: 'strawberry', ru: 'клубника', cat: 'fruit' },
-  { id: 'cherry', ru: 'вишня', cat: 'fruit' },
-  { id: 'watermelon', ru: 'арбуз', cat: 'fruit' },
-  { id: 'lemon', ru: 'лимон', cat: 'fruit' },
-  { id: 'carrot', ru: 'морковка', cat: 'vegetable' },
-  { id: 'tomato', ru: 'помидор', cat: 'vegetable' },
-  { id: 'potato', ru: 'картошка', cat: 'vegetable' },
-  { id: 'cucumber', ru: 'огурец', cat: 'vegetable' },
-  { id: 'corn', ru: 'кукуруза', cat: 'vegetable' },
-  { id: 'onion', ru: 'лук', cat: 'vegetable' },
-  { id: 'cat', ru: 'кошка', cat: 'animal' },
-  { id: 'dog', ru: 'собака', cat: 'animal' },
-  { id: 'fish', ru: 'рыба', cat: 'animal' },
-  { id: 'bird', ru: 'птица', cat: 'animal' },
-  { id: 'cow', ru: 'корова', cat: 'animal' },
-  { id: 'pig', ru: 'свинья', cat: 'animal' },
-  { id: 'horse', ru: 'лошадь', cat: 'animal' },
-  { id: 'frog', ru: 'лягушка', cat: 'animal' },
-  { id: 'duck', ru: 'утка', cat: 'animal' },
-  { id: 'rabbit', ru: 'кролик', cat: 'animal' },
-  { id: 'bear', ru: 'медведь', cat: 'animal' },
-  { id: 'lion', ru: 'лев', cat: 'animal' },
-  { id: 'monkey', ru: 'обезьяна', cat: 'animal' },
-  { id: 'elephant', ru: 'слон', cat: 'animal' },
-  { id: 'mouse', ru: 'мышка', cat: 'animal' },
-  { id: 'turtle', ru: 'черепаха', cat: 'animal' },
-  { id: 'sun', ru: 'солнце', cat: 'thing' },
-  { id: 'star', ru: 'звезда', cat: 'thing' },
-  { id: 'ball', ru: 'мяч', cat: 'thing' },
-  { id: 'car', ru: 'машина', cat: 'thing' },
-  { id: 'house', ru: 'дом', cat: 'thing' },
-  { id: 'tree', ru: 'дерево', cat: 'thing' },
-  { id: 'flower', ru: 'цветок', cat: 'thing' },
-  { id: 'boat', ru: 'кораблик', cat: 'thing' },
-  { id: 'cake', ru: 'торт', cat: 'thing' },
-  { id: 'egg', ru: 'яйцо', cat: 'thing' },
-  { id: 'chicken', ru: 'курица', cat: 'animal' },
-  { id: 'sheep', ru: 'овца', cat: 'animal' },
-  { id: 'goat', ru: 'коза', cat: 'animal' },
-  { id: 'giraffe', ru: 'жираф', cat: 'animal' },
-  { id: 'zebra', ru: 'зебра', cat: 'animal' },
-  { id: 'tiger', ru: 'тигр', cat: 'animal' },
-  { id: 'penguin', ru: 'пингвин', cat: 'animal' },
-  { id: 'owl', ru: 'сова', cat: 'animal' },
-  { id: 'snake', ru: 'змея', cat: 'animal' },
-  { id: 'bee', ru: 'пчела', cat: 'animal' },
-  { id: 'butterfly', ru: 'бабочка', cat: 'animal' },
-  { id: 'snail', ru: 'улитка', cat: 'animal' },
-  { id: 'crab', ru: 'краб', cat: 'animal' },
-  { id: 'octopus', ru: 'осьминог', cat: 'animal' },
-  { id: 'whale', ru: 'кит', cat: 'animal' },
-  { id: 'dolphin', ru: 'дельфин', cat: 'animal' },
-  { id: 'fox', ru: 'лиса', cat: 'animal' },
-  { id: 'wolf', ru: 'волк', cat: 'animal' },
-  { id: 'hedgehog', ru: 'ёжик', cat: 'animal' },
-  { id: 'spider', ru: 'паук', cat: 'animal' },
-  { id: 'ant', ru: 'муравей', cat: 'animal' },
-  { id: 'camel', ru: 'верблюд', cat: 'animal' },
-  { id: 'kangaroo', ru: 'кенгуру', cat: 'animal' },
-  { id: 'crocodile', ru: 'крокодил', cat: 'animal' },
-  { id: 'shark', ru: 'акула', cat: 'animal' },
-  { id: 'parrot', ru: 'попугай', cat: 'animal' },
-  { id: 'bread', ru: 'хлеб', cat: 'food' },
-  { id: 'cheese', ru: 'сыр', cat: 'food' },
-  { id: 'milk', ru: 'молоко', cat: 'food' },
-  { id: 'icecream', ru: 'мороженое', cat: 'food' },
-  { id: 'pizza', ru: 'пицца', cat: 'food' },
-  { id: 'candy', ru: 'конфета', cat: 'food' },
-  { id: 'cookie', ru: 'печенье', cat: 'food' },
-  { id: 'sandwich', ru: 'бутерброд', cat: 'food' },
-  { id: 'chocolate', ru: 'шоколад', cat: 'food' },
-  { id: 'pineapple', ru: 'ананас', cat: 'fruit' },
-  { id: 'peach', ru: 'персик', cat: 'fruit' },
-  { id: 'broccoli', ru: 'брокколи', cat: 'vegetable' },
-  { id: 'pepper', ru: 'перец', cat: 'vegetable' },
-  { id: 'bus', ru: 'автобус', cat: 'transport' },
-  { id: 'train', ru: 'поезд', cat: 'transport' },
-  { id: 'plane', ru: 'самолёт', cat: 'transport' },
-  { id: 'bicycle', ru: 'велосипед', cat: 'transport' },
-  { id: 'ship', ru: 'корабль', cat: 'transport' },
-  { id: 'rocket', ru: 'ракета', cat: 'transport' },
-  { id: 'helicopter', ru: 'вертолёт', cat: 'transport' },
-  { id: 'truck', ru: 'грузовик', cat: 'transport' },
-  { id: 'key', ru: 'ключ', cat: 'home' },
-  { id: 'bed', ru: 'кровать', cat: 'home' },
-  { id: 'chair', ru: 'стул', cat: 'home' },
-  { id: 'door', ru: 'дверь', cat: 'home' },
-  { id: 'clock', ru: 'часы', cat: 'home' },
-  { id: 'book', ru: 'книга', cat: 'home' },
-  { id: 'pencil', ru: 'карандаш', cat: 'home' },
-  { id: 'umbrella', ru: 'зонт', cat: 'home' },
-  { id: 'cap', ru: 'кепка', cat: 'clothes' },
-  { id: 'shoe', ru: 'кроссовок', cat: 'clothes' },
-  { id: 'socks', ru: 'носки', cat: 'clothes' },
-  { id: 'dress', ru: 'платье', cat: 'clothes' },
-  { id: 'tshirt', ru: 'футболка', cat: 'clothes' },
-  { id: 'glasses', ru: 'очки', cat: 'clothes' },
-  { id: 'backpack', ru: 'рюкзак', cat: 'clothes' },
-  { id: 'crown', ru: 'корона', cat: 'clothes' },
-  { id: 'gift', ru: 'подарок', cat: 'toy' },
-  { id: 'balloon', ru: 'шарик', cat: 'toy' },
-  { id: 'kite', ru: 'воздушный змей', cat: 'toy' },
-  { id: 'teddy', ru: 'мишка', cat: 'toy' },
-  { id: 'drum', ru: 'барабан', cat: 'toy' },
-  { id: 'guitar', ru: 'гитара', cat: 'toy' },
-  { id: 'moon', ru: 'луна', cat: 'nature' },
-  { id: 'cloud', ru: 'облако', cat: 'nature' },
-  { id: 'snowman', ru: 'снеговик', cat: 'nature' },
-  { id: 'rainbow', ru: 'радуга', cat: 'nature' },
-  { id: 'fire', ru: 'огонь', cat: 'nature' },
-  { id: 'leaf', ru: 'лист', cat: 'nature' },
-  { id: 'mountain', ru: 'гора', cat: 'nature' },
-  { id: 'snowflake', ru: 'снежинка', cat: 'nature' },
-  { id: 'eye', ru: 'глаз', cat: 'body' },
-  { id: 'mouth', ru: 'рот', cat: 'body' },
-  { id: 'tooth', ru: 'зуб', cat: 'body' },
-  { id: 'hand', ru: 'рука', cat: 'body' },
-  { id: 'ear', ru: 'ухо', cat: 'body' },
-  { id: 'nose', ru: 'нос', cat: 'body' },
-  // More words (race, 2026-11-21)
-  { id: 'kiwi', ru: 'киви', cat: 'fruit' },
-  { id: 'coconut', ru: 'кокос', cat: 'fruit' },
-  { id: 'mango', ru: 'манго', cat: 'fruit' },
-  { id: 'blueberries', ru: 'черника', cat: 'fruit' },
-  { id: 'mushroom', ru: 'гриб', cat: 'vegetable' },
-  { id: 'eggplant', ru: 'баклажан', cat: 'vegetable' },
-  { id: 'panda', ru: 'панда', cat: 'animal' },
-  { id: 'koala', ru: 'коала', cat: 'animal' },
-  { id: 'squirrel', ru: 'белка', cat: 'animal' },
-  { id: 'deer', ru: 'олень', cat: 'animal' },
-  { id: 'unicorn', ru: 'единорог', cat: 'animal' },
-  { id: 'ladybug', ru: 'божья коровка', cat: 'animal' },
-  { id: 'bat', ru: 'летучая мышь', cat: 'animal' },
-  { id: 'dinosaur', ru: 'динозавр', cat: 'animal' },
-  { id: 'burger', ru: 'бургер', cat: 'food' },
-  { id: 'fries', ru: 'картошка фри', cat: 'food' },
-  { id: 'hotdog', ru: 'хот-дог', cat: 'food' },
-  { id: 'donut', ru: 'пончик', cat: 'food' },
-  { id: 'cupcake', ru: 'кекс', cat: 'food' },
-  { id: 'lollipop', ru: 'леденец', cat: 'food' },
-  { id: 'popcorn', ru: 'попкорн', cat: 'food' },
-  { id: 'pancakes', ru: 'блинчики', cat: 'food' },
-  { id: 'honey', ru: 'мёд', cat: 'food' },
-  { id: 'taxi', ru: 'такси', cat: 'transport' },
-  { id: 'ambulance', ru: 'скорая помощь', cat: 'transport' },
-  { id: 'policecar', ru: 'полицейская машина', cat: 'transport' },
-  { id: 'fireengine', ru: 'пожарная машина', cat: 'transport' },
-  { id: 'motorcycle', ru: 'мотоцикл', cat: 'transport' },
-  { id: 'scooter', ru: 'самокат', cat: 'transport' },
-  { id: 'tractor', ru: 'трактор', cat: 'transport' },
-  { id: 'sailboat', ru: 'парусник', cat: 'transport' },
-  { id: 'parachute', ru: 'парашют', cat: 'transport' },
-  { id: 'volcano', ru: 'вулкан', cat: 'nature' },
-  { id: 'tornado', ru: 'торнадо', cat: 'nature' },
-  { id: 'lightning', ru: 'молния', cat: 'nature' },
-  { id: 'wave', ru: 'волна', cat: 'nature' },
-  { id: 'sunflower', ru: 'подсолнух', cat: 'nature' },
-  { id: 'tulip', ru: 'тюльпан', cat: 'nature' },
-  { id: 'cactus', ru: 'кактус', cat: 'nature' },
-  { id: 'palm', ru: 'пальма', cat: 'nature' },
-  { id: 'planet', ru: 'планета', cat: 'nature' },
-  { id: 'robot', ru: 'робот', cat: 'toy' },
-  { id: 'puzzle', ru: 'пазл', cat: 'toy' },
-  { id: 'trophy', ru: 'кубок', cat: 'toy' },
-  { id: 'dice', ru: 'кубик', cat: 'toy' },
-  { id: 'skateboard', ru: 'скейтборд', cat: 'toy' },
-  { id: 'gloves', ru: 'перчатки', cat: 'clothes' },
-  { id: 'scarf', ru: 'шарф', cat: 'clothes' },
-  { id: 'jeans', ru: 'джинсы', cat: 'clothes' },
-  { id: 'coat', ru: 'пальто', cat: 'clothes' },
-  { id: 'bulb', ru: 'лампочка', cat: 'home' },
-  { id: 'spoon', ru: 'ложка', cat: 'home' },
-  { id: 'scissors', ru: 'ножницы', cat: 'home' },
-  { id: 'phone', ru: 'телефон', cat: 'home' },
-  { id: 'computer', ru: 'компьютер', cat: 'home' },
-  { id: 'tv', ru: 'телевизор', cat: 'home' },
-  { id: 'toothbrush', ru: 'зубная щётка', cat: 'home' },
-  { id: 'bell', ru: 'колокольчик', cat: 'home' },
-  { id: 'basket', ru: 'корзинка', cat: 'home' },
-  { id: 'hammer', ru: 'молоток', cat: 'home' },
-];
-
-/** Colours: drawn paint blobs; id c-<name> (so the colour orange is not the fruit). */
-export const COLORS: readonly (Word & { paint: string })[] = [
-  { id: 'c-red', ru: 'красный', cat: 'color', paint: '#e63946' },
-  { id: 'c-blue', ru: 'синий', cat: 'color', paint: '#277da1' },
-  { id: 'c-green', ru: 'зелёный', cat: 'color', paint: '#43aa8b' },
-  { id: 'c-yellow', ru: 'жёлтый', cat: 'color', paint: '#ffd23f' },
-  { id: 'c-orange', ru: 'оранжевый', cat: 'color', paint: '#f77f00' },
-  { id: 'c-pink', ru: 'розовый', cat: 'color', paint: '#ff8fab' },
-  { id: 'c-purple', ru: 'фиолетовый', cat: 'color', paint: '#7b2cbf' },
-  { id: 'c-brown', ru: 'коричневый', cat: 'color', paint: '#8d5524' },
-  { id: 'c-black', ru: 'чёрный', cat: 'color', paint: '#222222' },
-  { id: 'c-white', ru: 'белый', cat: 'color', paint: '#ffffff' },
-];
-
-/** English numbers: 0–20, then the tens up to 100. */
-export const NUMBER_VALUES: readonly number[] = [...Array.from({ length: 21 }, (_, i) => i), 30, 40, 50, 60, 70, 80, 90, 100];
-export const numberId = (n: number) => `n${n}`;
-export const numberOf = (id: string) => (/^n\d+$/.test(id) ? Number(id.slice(1)) : undefined);
-export const NUMBERS: readonly Word[] = NUMBER_VALUES.map((n) => ({ id: numberId(n), ru: unstress(content.numbers.nom[n]!), cat: 'number' }));
-
-export const WORDS: readonly Word[] = [...PICTURES, ...COLORS, ...NUMBERS];
+// The words themselves live in the shared dictionary; re-exported for the games that import them from here.
+export {
+  COLORS, NUMBER_VALUES, NUMBERS, numberId, numberOf, PICTURES, WORDS, wordById, type Category, type Word,
+} from '../../core/dictionary';
 
 export type Mode = 'words' | 'numbers' | 'mix' | 'rules' | 'sounds';
-
-export const wordById = (id: string) => WORDS.find((w) => w.id === id)!;
 
 const wrap = (v: number, n: number) => ((v % n) + n) % n;
 
@@ -293,7 +76,7 @@ export const NEW_PER_GAME = 4;
 /**
  * Words for one game, `stats` = id → times eaten right on the first try:
  * at most NEW_PER_GAME new words (the simplest first: the pool is ordered
- * from basic to harder), then the ones still being learnt (least practised
+ * from basic to harder, see byLevel), then the ones still being learnt (least practised
  * first), then learnt ones for review. Short of those, more new words.
  */
 export function pickWords(stats: Record<string, number>, n: number, rng: Rng, pool: readonly Word[] = PICTURES, due: readonly string[] = []): string[] {
@@ -316,7 +99,7 @@ export function pickWords(stats: Record<string, number>, n: number, rng: Rng, po
 }
 
 /** Words mode draws from pictures and colours. */
-const WORD_POOL: readonly Word[] = [...PICTURES, ...COLORS];
+const WORD_POOL: readonly Word[] = byLevel([...PICTURES, ...COLORS]);
 
 /** The ten words of one game: words, numbers, or six words and four numbers mixed. */
 export function planGame(mode: Mode, stats: Record<string, number>, rounds: number, rng: Rng, due: readonly string[] = []): string[] {

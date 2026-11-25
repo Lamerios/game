@@ -11,6 +11,7 @@ on:
       - src/games/note/vocab.ts
       - src/games/note/generator.ts
       - src/games/snake/logic.ts
+      - src/core/dictionary.ts
       - tools/tts.ts
       - tools/kokoro_tts.py
       - .github/workflows/tts.yml
