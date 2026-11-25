@@ -26,6 +26,14 @@ def spoken(text: str) -> str:
 # copy is kept, cut at its first token's start time.
 LEAD_IN = 0.03  # seconds kept before the second copy starts
 FADE = 0.012
+# A word that starts with a hissing sound ("six", "star") has that quiet "s"
+# before its first token's start time, and it fell below the silence trim:
+# "six" came out as "zix". So the cut walks back from the token start through
+# any sound louder than ONSET_DB (up to ONSET_MAX seconds), stopping in the
+# silence between the two copies, and the silence trim is gentler.
+ONSET_DB = -62.0
+ONSET_MAX = 0.25
+SILENCE_DB = -60
 # The very end of a longer utterance trails off in a breathy hiss, heard as an
 # extra "s" ("bananas"). So the clip also ends shortly after the last word's
 # end time, with a soft fade-out.
@@ -60,6 +68,18 @@ def trim_hiss(pcm: np.ndarray, text: str, sr: int = 24000) -> np.ndarray:
     return pcm[:end]
 
 
+def onset(pcm: np.ndarray, i: int, sr: int = 24000) -> int:
+    """Moves the cut back while the 5 ms before it still sound (the quiet start of s, f, sh, th)."""
+    fr = int(0.005 * sr)
+    lo = max(0, i - int(ONSET_MAX * sr))
+    while i - fr >= lo:
+        seg = pcm[i - fr:i]
+        if 20 * np.log10(float(np.sqrt((seg ** 2).mean())) + 1e-12) < ONSET_DB:
+            break
+        i -= fr
+    return i
+
+
 def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
     line = spoken(text)
     results = [r for r in pipe(f"{line} {line}", voice=voice, speed=speed) if r.audio is not None]
@@ -72,7 +92,7 @@ def render(pipe: KPipeline, text: str, voice: str, speed: float) -> np.ndarray:
         start = tokens[half].start_ts if half < len(tokens) else None
         if start is not None:
             pcm = r.audio.numpy().astype(np.float32)
-            i = max(0, int((start - LEAD_IN) * 24000))
+            i = onset(pcm, max(0, int((start - LEAD_IN) * 24000)))
             words = [t for t in tokens[half:] if any(c.isalnum() for c in t.text) and t.end_ts is not None]
             j = len(pcm)
             if words:
@@ -100,7 +120,8 @@ def encode(pcm: np.ndarray, text: str, out: str) -> str:
     The tail is judged on the clip as it sounds after mp3 encoding (encode, decode,
     trim), which is where the hiss shows; then the trimmed audio is encoded once more.
     """
-    trim = "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse"
+    trim = (f"silenceremove=start_periods=1:start_threshold={SILENCE_DB}dB,areverse,"
+            "silenceremove=start_periods=1:start_threshold=-45dB,areverse")
     mp3 = ffmpeg([*RAW, "-i", "-", "-af", trim, "-ac", "1", "-b:a", "96k", "-f", "mp3", "-"], pcm.astype(np.float32).tobytes())
     x = np.frombuffer(ffmpeg(["-f", "mp3", "-i", "-", *RAW, "-"], mp3), np.float32)
     n0 = len(x)
